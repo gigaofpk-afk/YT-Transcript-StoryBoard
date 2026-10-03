@@ -2,9 +2,6 @@ const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
 
-// Hugging Face Secrets will inject this
-const serviceAccountJsonStr = process.env.GDRIVE_SERVICE_ACCOUNT_JSON;
-
 let drive = null;
 let FOLDER_ID = null;
 
@@ -12,18 +9,38 @@ let FOLDER_ID = null;
 const fileIdCache = {};
 
 async function initGDrive() {
-    if (!serviceAccountJsonStr) {
-        console.log("☁️  GDRIVE_SERVICE_ACCOUNT_JSON not found. Google Drive sync is disabled.");
-        return;
-    }
-
+    let auth;
     try {
-        const credentials = JSON.parse(serviceAccountJsonStr);
-        const auth = new google.auth.GoogleAuth({
-            credentials,
-            scopes: ['https://www.googleapis.com/auth/drive.file']
-        });
-        
+        if (process.env.GDRIVE_SERVICE_ACCOUNT_JSON) {
+            const credentials = JSON.parse(process.env.GDRIVE_SERVICE_ACCOUNT_JSON);
+            auth = new google.auth.GoogleAuth({
+                credentials,
+                scopes: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive']
+            });
+        } else if (fs.existsSync(path.join(__dirname, 'gdrive_token.json'))) {
+            // OAuth2 token support
+            const tokenStr = fs.readFileSync(path.join(__dirname, 'gdrive_token.json'), 'utf8');
+            const tokenObj = JSON.parse(tokenStr);
+            const oAuth2Client = new google.auth.OAuth2(
+                tokenObj.client_id,
+                tokenObj.client_secret
+            );
+            
+            // Format token for googleapis
+            const creds = {
+                access_token: tokenObj.token,
+                refresh_token: tokenObj.refresh_token,
+                scope: tokenObj.scopes.join(' '),
+                token_type: 'Bearer',
+                expiry_date: new Date(tokenObj.expiry).getTime()
+            };
+            oAuth2Client.setCredentials(creds);
+            auth = oAuth2Client;
+        } else {
+            console.log("☁️  No GDrive token found. Google Drive sync is disabled.");
+            return;
+        }
+
         drive = google.drive({ version: 'v3', auth });
         
         // Find or create 'YouTubeChecker_Sync' folder
@@ -82,7 +99,8 @@ async function restoreFromGDrive(filename) {
             console.log(`☁️  Restored ${filename} from GDrive.`);
         }
     } catch(e) {
-        console.error(`☁️  Failed to restore ${filename}:`, e.message);
+        // Only log error if not a 404 (file might not exist yet)
+        if (e.code !== 404) console.error(`☁️  Failed to restore ${filename}:`, e.message);
     }
 }
 
