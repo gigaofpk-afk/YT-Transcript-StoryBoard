@@ -17,9 +17,9 @@ async function initGDrive() {
                 credentials,
                 scopes: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive']
             });
-        } else if (fs.existsSync(path.join(__dirname, 'gdrive_token.json'))) {
+        } else if (process.env.GDRIVE_TOKEN_JSON || fs.existsSync(path.join(__dirname, 'gdrive_token.json'))) {
             // OAuth2 token support
-            const tokenStr = fs.readFileSync(path.join(__dirname, 'gdrive_token.json'), 'utf8');
+            const tokenStr = process.env.GDRIVE_TOKEN_JSON || fs.readFileSync(path.join(__dirname, 'gdrive_token.json'), 'utf8');
             const tokenObj = JSON.parse(tokenStr);
             const oAuth2Client = new google.auth.OAuth2(
                 tokenObj.client_id,
