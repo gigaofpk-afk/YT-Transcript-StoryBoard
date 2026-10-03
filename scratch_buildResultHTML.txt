@@ -1,0 +1,109 @@
+function buildResultHTML(data, index, fromScreenshot) {
+  let html = '';
+  if (fromScreenshot && data.extractedUrl) {
+    html += `<div class="extracted-banner"><span style="flex-shrink:0;font-size:1rem">&#128247;</span><div><div class="eb-label">EXTRACTED FROM SCREENSHOT</div><div class="eb-url">${escHtml(data.extractedUrl)}</div></div></div>`;
+  }
+  if (!data.valid) {
+    html += statusRow(false, fromScreenshot ? 'No YouTube video identified' : 'Invalid YouTube URL', '', 'INVALID');
+    html += `<div class="error-banner"><strong>Error</strong>${escHtml(data.error || 'Unknown error.')}</div>`;
+    if (data.extractedText) html += `<div class="error-banner" style="color:var(--muted);border-color:var(--border);background:var(--surface)"><strong style="color:var(--text)">Extracted Text</strong>${escHtml(data.extractedText.substring(0,400))}</div>`;
+    return html;
+  }
+  html += statusRow(true, 'Valid YouTube URL', `ID: ${escHtml(data.videoId)}`, 'VALID');
+  if (!data.videoFound) {
+    html += statusRow(false, 'Video Not Found', 'Private, deleted or unavailable.', 'UNAVAILABLE');
+    html += statusRow(false, 'Transcripts', 'Cannot check — video unavailable.', 'UNKNOWN');
+    return html;
+  }
+  html += `<div class="video-preview">
+    <div class="thumb-wrap">
+      <img src="${escHtml(data.thumbnail)}" onerror="this.style.display='none'"/>
+      <div class="play-badge"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="rgba(0,0,0,.5)"/><polygon points="10,8 18,12 10,16" fill="white"/></svg></div>
+    </div>
+    <div class="video-meta">
+      <div class="video-title">${escHtml(data.title)}</div>
+      <div class="video-author">${escHtml(data.author)}</div>
+      <div class="video-id">ID: ${escHtml(data.videoId)}</div>
+    </div>
+  </div>`;
+  if (data.transcriptAvailable) {
+    html += statusRow(true, 'Transcripts / Captions Available', '', 'AVAILABLE');
+    if (data.languages && data.languages.length > 0) {
+      html += `<div class="langs-section"><div class="langs-header">&#9646; Languages (${data.languages.length})</div><div class="langs-grid">`;
+      data.languages.forEach(l => { html += `<div class="lang-chip"><span class="dot"></span>${escHtml(l.name)} <span style="opacity:.5;font-size:.67em">[${escHtml(l.code)}]</span></div>`; });
+      html += '</div></div>';
+    }
+    html += buildDownloadPanel(data, `dl_${index}_${data.videoId}`);
+  } else {
+    html += statusRow(false, 'No Transcripts / Captions', escHtml(data.transcriptError || 'No captions found.'), 'UNAVAILABLE');
+    
+    // Gemini transcription integration
+    const savedKey = localStorage.getItem('gemini_api_key') || '';
+    const geminiUid = `gemini_${index}_${data.videoId}`;
+    html += `
+      <div class="gemini-transcribe-panel" style="margin-top: 10px; padding: 12px; border: 1px dashed rgba(167,139,250,.3); border-radius: 8px; background: rgba(167,139,250,.04); display: flex; flex-direction: column; gap: 8px;">
+        <div style="font-family:'Space Mono', monospace; font-size:.68rem; color:var(--accent3); display:flex; align-items:center; gap:6px; font-weight:bold;">
+          <span style="font-size:1rem;">🎙️</span> AI SPEECH-TO-TEXT TRANSCRIPTION
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <input type="password" class="dl-select" id="${geminiUid}_key" placeholder="Enter Gemini API Key..." value="${escHtml(savedKey)}" style="flex:1; min-width:180px; font-size:.7rem; padding:6px 10px;" oninput="saveGeminiKey('${geminiUid}')" />
+          <button class="btn" id="${geminiUid}_btn" onclick="doGeminiTranscribe('${escHtml(data.videoId)}', ${index}, '${geminiUid}')" style="padding:7px 14px; font-size:.72rem; background:var(--accent3); color:#000;">
+            Transcribe Video
+          </button>
+        </div>
+        <div id="${geminiUid}_status" style="font-family:'Space Mono', monospace; font-size:.65rem; color:var(--muted); min-height:1.2em;">
+          Uses your free Gemini API Key. Audio is downloaded and transcribed in seconds.
+        </div>
+      </div>
+    `;
+  }
+
+  // Storyboard screenshots panel
+  if (data.videoId) {
+    const sbUid = `sb_${index}_${data.videoId}`;
+    html += `
+      <div class="storyboard-panel" style="margin-top: 14px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="font-family:'Space Mono', monospace; font-size:.7rem; color:var(--text); font-weight:bold; display:flex; align-items:center; gap:6px;">
+            <span>🎞️</span> STORYBOARD SCREENSHOTS
+          </div>
+          <div id="${sbUid}_controls" style="display: none; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 6px; font-family:'Space Mono', monospace; font-size:.65rem; color:var(--text); cursor: pointer; user-select: none;">
+              <input type="checkbox" id="${sbUid}_use_ts" checked style="accent-color: var(--accent); cursor: pointer;" />
+              Include Timestamp in Filename
+            </label>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn" style="padding: 5px 10px; font-size: .65rem; background: rgba(0,229,255,.12); color: var(--accent); border: 1px solid rgba(0,229,255,.25);" onclick="toggleAllStoryboard('${sbUid}', true)">Select All</button>
+              <button class="btn" style="padding: 5px 10px; font-size: .65rem; background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border);" onclick="toggleAllStoryboard('${sbUid}', false)">Deselect All</button>
+            </div>
+            <button class="btn" onclick="downloadSelectedStoryboard('${sbUid}', '${escHtml(data.title)}')" style="padding: 6px 12px; font-size: .68rem; background: var(--success); color: #000;">
+              Download Selected
+            </button>
+          </div>
+        </div>
+
+        <!-- Initial Load Button -->
+        <div id="${sbUid}_init" style="text-align: center; padding: 10px 0;">
+          <button class="btn" id="${sbUid}_load_btn" onclick="loadStoryboard('${escHtml(data.videoId)}', '${sbUid}')" style="margin: 0 auto; padding: 8px 16px; font-size: .75rem; background: rgba(0,229,255,.1); color: var(--accent); border: 1px solid rgba(0,229,255,.25);">
+            🎞️ Load Storyboard Screenshots
+          </button>
+        </div>
+
+        <!-- Loading spinner -->
+        <div id="${sbUid}_loading" style="display: none; flex-direction: column; align-items: center; gap: 8px; padding: 15px 0;">
+          <div class="spinner" style="width: 28px; height: 28px; border-width: 2px;"></div>
+          <div style="font-family:'Space Mono', monospace; font-size:.68rem; color:var(--accent);" id="${sbUid}_loading_txt">Fetching storyboards...</div>
+        </div>
+
+        <!-- Screenshots Grid -->
+        <div id="${sbUid}_grid" class="storyboard-grid" style="display: none;"></div>
+
+        <div id="${sbUid}_status" style="font-family:'Space Mono', monospace; font-size:.65rem; color:var(--muted); min-height: 1.2em;">
+          Slices the YouTube storyboard spritesheet into individual frames with exact timestamps.
+        </div>
+      </div>
+    `;
+  }
+  return html;
+}
+

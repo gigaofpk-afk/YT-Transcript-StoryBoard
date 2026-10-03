@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Local Data & Media
+saved_screenshots/
+uploads/
+scratch/
+*.zip
+*.log
+
+# Databases & State
+history.json
+matches.json
+reports.json
+
+# Environment Variables & Secrets
+.env
+.env.local
+
+# OS Generated
+.DS_Store
+Thumbs.db
+
+*.traineddata

@@ -1,0 +1,1885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transcript Probe — YouTube Caption Checker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0f; --surface: #111118; --border: #1e1e2e;
+      --accent: #00e5ff; --accent2: #ff4ecd; --accent3: #a78bfa;
+      --success: #00ff94; --error: #ff4e6a; --warn: #ffb800;
+      --text: #e2e2f0; --muted: #5a5a7a; --card: #13131f; --radius: 12px;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; overflow-x: hidden; }
+    body::before {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image: linear-gradient(rgba(0,229,255,.03) 1px,transparent 1px), linear-gradient(90deg,rgba(0,229,255,.03) 1px,transparent 1px);
+      background-size: 40px 40px;
+    }
+    body::after {
+      content: ''; position: fixed; top: -30%; left: 50%; transform: translateX(-50%);
+      width: 900px; height: 600px; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse at center, rgba(0,229,255,.07) 0%, transparent 70%);
+    }
+    .page { position: relative; z-index: 1; max-width: 840px; margin: 0 auto; padding: 56px 24px 80px; }
+
+    /* Header */
+    .header { text-align: center; margin-bottom: 52px; animation: fadeDown .7s ease both; }
+    .badge {
+      display: inline-block; font-family: 'Space Mono', monospace; font-size: 10px;
+      letter-spacing: .2em; text-transform: uppercase; color: var(--accent);
+      background: rgba(0,229,255,.08); border: 1px solid rgba(0,229,255,.2);
+      padding: 4px 14px; border-radius: 100px; margin-bottom: 18px;
+    }
+    h1 {
+      font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 800; letter-spacing: -.03em; line-height: 1.06;
+      background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .header p { margin-top: 12px; color: var(--muted); font-size: .92rem; }
+
+    /* Card */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px; animation: fadeUp .7s ease both; }
+
+    /* Tabs */
+    .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 28px; }
+    .tab-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 14px; background: transparent; border: none; border-radius: 7px;
+      color: var(--muted); font-family: 'Syne', sans-serif; font-size: .84rem; font-weight: 700;
+      letter-spacing: .03em; cursor: pointer; transition: background .2s, color .2s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { background: rgba(0,229,255,.1); color: var(--accent); border: 1px solid rgba(0,229,255,.2); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Section label */
+    .sec-label {
+      font-family: 'Space Mono', monospace; font-size: .7rem; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .sec-label .dot { color: var(--accent); font-weight: bold; }
+
+    /* Textarea */
+    .url-textarea {
+      width: 100%; min-height: 100px; padding: 12px 14px;
+      background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px;
+      color: var(--text); font-family: 'Space Mono', monospace; font-size: .78rem;
+      line-height: 1.7; outline: none; resize: vertical;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .url-textarea::placeholder { color: var(--muted); }
+    .url-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,229,255,.1); }
+
+    /* Playlist banner */
+    #playlistBanner {
+      display: none; margin-top: 10px; padding: 12px 16px;
+      background: rgba(167,139,250,.08); border: 1px solid rgba(167,139,250,.25);
+      border-radius: 10px; font-family: 'Space Mono', monospace; font-size: .75rem;
+      color: var(--accent3); gap: 10px; align-items: flex-start; flex-direction: column;
+    }
+    #playlistBanner.show { display: flex; }
+    .pl-header { display: flex; align-items: center; gap: 8px; width: 100%; }
+    .pl-title { flex: 1; font-weight: 700; }
+    .pl-meta { opacity: .65; font-size: .68rem; }
+    .pl-checkbox-row { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .72rem; color: var(--text); }
+    .pl-checkbox-row input { accent-color: var(--accent3); width: 14px; height: 14px; cursor: pointer; }
+    #plVideoList {
+      display: none; max-height: 160px; overflow-y: auto; width: 100%;
+      background: rgba(0,0,0,.2); border-radius: 7px; padding: 8px;
+    }
+    #plVideoList.show { display: block; }
+    .pl-video-item { padding: 4px 6px; font-size: .68rem; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.05); }
+    .pl-video-item:last-child { border: none; }
+    .pl-video-item span { color: var(--accent3); margin-right: 6px; }
+
+    /* OR separator */
+    .or-sep { display: flex; align-items: center; gap: 16px; margin: 28px 0; }
+    .or-sep .line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); }
+    .or-sep .or-badge {
+      font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700;
+      letter-spacing: .15em; color: var(--muted); background: var(--surface);
+      border: 1px solid var(--border); padding: 4px 14px; border-radius: 100px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: flex; align-items: center; gap: 8px; padding: 13px 22px;
+      background: var(--accent); color: #000; font-family: 'Syne', sans-serif;
+      font-size: .88rem; font-weight: 700; letter-spacing: .02em; border: none;
+      border-radius: 10px; cursor: pointer; white-space: nowrap;
+      transition: background .2s, transform .1s, box-shadow .2s;
+    }
+    .btn:hover { background: #33ecff; box-shadow: 0 0 20px rgba(0,229,255,.35); }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn.full-width { width: 100%; justify-content: center; margin-top: 12px; }
+
+    /* Drop zone */
+    .drop-zone {
+      position: relative; border: 2px dashed var(--border); border-radius: 12px;
+      background: var(--surface); min-height: 150px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+      transition: border-color .2s, background .2s; overflow: hidden;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(0,229,255,.04); }
+    .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .drop-icon { font-size: 2rem; opacity: .35; pointer-events: none; }
+    .drop-label { font-size: .8rem; color: var(--muted); font-family: 'Space Mono', monospace; text-align: center; pointer-events: none; }
+    .drop-label strong { color: var(--accent); }
+    .drop-hint { font-size: .67rem; color: var(--muted); font-family: 'Space Mono', monospace; opacity: .6; pointer-events: none; }
+
+    /* Image preview grid */
+    #imgPreviewGrid { display: none; grid-template-columns: repeat(auto-fill, minmax(110px,1fr)); gap: 8px; margin-top: 12px; }
+    #imgPreviewGrid.active { display: grid; }
+    .img-thumb { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); aspect-ratio: 16/10; }
+    .img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .img-thumb .rm-btn {
+      position: absolute; top: 3px; right: 3px; background: rgba(255,78,106,.85);
+      border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer;
+      color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center;
+    }
+    .img-thumb .rm-btn:hover { background: var(--error); }
+    #imgCountBadge { font-family: 'Space Mono', monospace; font-size: .68rem; color: var(--muted); margin-top: 8px; display: none; }
+
+    /* Divider */
+    .divider { height: 1px; background: var(--border); margin: 26px 0; }
+
+    /* Loading */
+    #loading { display: none; flex-direction: column; align-items: center; gap: 14px; padding: 20px 0; }
+    #loading.active { display: flex; }
+    .spinner { width: 38px; height: 38px; border: 2.5px solid rgba(0,229,255,.15); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+    .loading-text { font-family: 'Space Mono', monospace; font-size: .76rem; color: var(--accent); letter-spacing: .12em; animation: pulse 1.4s ease infinite; }
+
+    /* Results */
+    #results { display: none; flex-direction: column; gap: 18px; animation: fadeUp .4s ease both; }
+    #results.active { display: flex; }
+
+    /* Batch card */
+    .batch-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+    .batch-card-header { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: rgba(0,229,255,.04); border-bottom: 1px solid var(--border); font-family: 'Space Mono', monospace; font-size: .7rem; color: var(--muted); }
+    .bc-num { background: rgba(0,229,255,.15); color: var(--accent); border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: .68rem; font-weight: 700; flex-shrink: 0; }
+    .bc-url { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
+    .batch-card-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* Video card */
+    .video-preview { display: flex; gap: 14px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+    .thumb-wrap { position: relative; flex-shrink: 0; width: 96px; height: 54px; border-radius: 6px; overflow: hidden; background: #1a1a2a; }
+    .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .play-badge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+    .play-badge svg { width: 20px; filter: drop-shadow(0 1px 4px rgba(0,0,0,.8)); }
+    .video-meta { overflow: hidden; flex: 1; }
+    .video-title { font-size: .86rem; font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .video-author { font-size: .73rem; color: var(--muted); margin-top: 2px; font-family: 'Space Mono', monospace; }
+    .video-id { font-size: .66rem; color: rgba(0,229,255,.5); font-family: 'Space Mono', monospace; margin-top: 3px; }
+
+    /* Status rows */
+    .status-row { display: flex; align-items: center; gap: 10px; padding: 11px 13px; background: var(--card); border: 1px solid var(--border); border-radius: 9px; }
+    .status-icon { flex-shrink: 0; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+    .status-icon.ok { background: rgba(0,255,148,.1); color: var(--success); }
+    .status-icon.fail { background: rgba(255,78,106,.1); color: var(--error); }
+    .status-icon.warn { background: rgba(255,184,0,.1); color: var(--warn); }
+    .status-label { flex: 1; font-size: .83rem; font-weight: 700; }
+    .status-sublabel { font-size: .72rem; color: var(--muted); margin-top: 2px; font-family: 'Space Mono', monospace; }
+    .status-tag { font-family: 'Space Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; border-radius: 6px; }
+    .tag-ok   { background: rgba(0,255,148,.12); color: var(--success); border: 1px solid rgba(0,255,148,.25); }
+    .tag-fail { background: rgba(255,78,106,.12); color: var(--error);   border: 1px solid rgba(255,78,106,.25); }
+    .tag-warn { background: rgba(255,184,0,.1);   color: var(--warn);    border: 1px solid rgba(255,184,0,.25); }
+
+    /* Langs */
+    .langs-section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+    .langs-header { font-size: .68rem; font-family: 'Space Mono', monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; }
+    .langs-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .lang-chip { display: flex; align-items: center; gap: 5px; padding: 4px 9px; background: rgba(0,229,255,.06); border: 1px solid rgba(0,229,255,.15); border-radius: 6px; font-family: 'Space Mono', monospace; font-size: .72rem; color: var(--accent); }
+    .lang-chip .dot { width: 5px; height: 5px; background: var(--success); border-radius: 50%; flex-shrink: 0; }
+
+    /* Download panel */
+    .download-panel { background: var(--card); border: 1px solid rgba(0,229,255,.2); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .dl-panel-header { display: flex; align-items: center; gap: 7px; font-family: 'Space Mono', monospace; font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+    .dl-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+    .dl-field { display: flex; flex-direction: column; gap: 4px; }
+    .dl-field label { font-family: 'Space Mono', monospace; font-size: .66rem; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+    .dl-select { background: var(--surface); border: 1.5px solid var(--border); border-radius: 7px; color: var(--text); font-family: 'Space Mono', monospace; font-size: .74rem; padding: 7px 10px; outline: none; cursor: pointer; min-width: 150px; transition: border-color .2s; }
+    .dl-select:focus { border-color: var(--accent); }
+    .dl-btns { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+    .dl-btn {
+      display: flex; align-items: center; gap: 6px; padding: 8px 16px;
+      border: none; border-radius: 7px; font-family: 'Syne', sans-serif;
+      font-size: .78rem; font-weight: 700; cursor: pointer;
+      transition: transform .1s, box-shadow .15s, background .15s; white-space: nowrap;
+    }
+    .dl-btn:active { transform: scale(.96); }
+    .dl-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .dl-btn.txt { background: rgba(0,229,255,.12); color: var(--accent); border: 1px solid rgba(0,229,255,.25); }
+    .dl-btn.txt:hover:not(:disabled) { background: rgba(0,229,255,.22); box-shadow: 0 0 14px rgba(0,229,255,.2); }
+    .dl-btn.srt { background: rgba(255,78,205,.1); color: var(--accent2); border: 1px solid rgba(255,78,205,.25); }
+    .dl-btn.srt:hover:not(:disabled) { background: rgba(255,78,205,.2); box-shadow: 0 0 14px rgba(255,78,205,.2); }
+    .dl-btn.md { background: rgba(180,255,120,.1); color: #b4ff78; border: 1px solid rgba(180,255,120,.25); }
+    .dl-btn.md:hover:not(:disabled) { background: rgba(180,255,120,.2); box-shadow: 0 0 14px rgba(180,255,120,.2); }
+    .dl-btn.zip { background: rgba(167,139,250,.12); color: var(--accent3); border: 1px solid rgba(167,139,250,.25); }
+    .dl-btn.zip:hover:not(:disabled) { background: rgba(167,139,250,.22); box-shadow: 0 0 14px rgba(167,139,250,.2); }
+    .dl-btn.zip-loading { animation: pulse 1s ease infinite; }
+    .dl-status { font-family: 'Space Mono', monospace; font-size: .67rem; color: var(--muted); min-height: 1em; }
+    .dl-status.ok  { color: var(--success); }
+    .dl-status.err { color: var(--error); }
+
+    /* Banners */
+    .extracted-banner { display: flex; align-items: flex-start; gap: 10px; padding: 10px 13px; background: rgba(255,78,205,.06); border: 1px solid rgba(255,78,205,.2); border-radius: 9px; font-family: 'Space Mono', monospace; font-size: .72rem; color: var(--accent2); }
+    .eb-label { opacity: .6; font-size: .65rem; margin-bottom: 2px; }
+    .eb-url { word-break: break-all; }
+    .error-banner { padding: 11px 14px; background: rgba(255,78,106,.07); border: 1px solid rgba(255,78,106,.2); border-radius: 9px; font-family: 'Space Mono', monospace; font-size: .75rem; color: var(--error); }
+    .error-banner strong { display: block; margin-bottom: 4px; font-size: .77rem; }
+
+    /* Empty */
+    .empty-state { text-align: center; padding: 30px 0 6px; }
+    .empty-state .icon { font-size: 2.3rem; margin-bottom: 12px; opacity: .4; }
+    .empty-state p { color: var(--muted); font-size: .83rem; font-family: 'Space Mono', monospace; line-height: 1.7; }
+
+    /* History */
+    .history-item { display: flex; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; cursor: pointer; transition: border-color .2s; }
+    .history-item:hover { border-color: var(--accent); }
+
+    @keyframes fadeDown { from { opacity:0; transform:translateY(-16px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fadeUp   { from { opacity:0; transform:translateY(12px); }  to { opacity:1; transform:translateY(0); } }
+    @keyframes spin     { to { transform: rotate(360deg); } }
+    /* Storyboard Screenshots */
+    .storyboard-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      max-height: 480px;
+      overflow-y: auto;
+      padding: 12px;
+      background: #09090e;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .sb-frame-card {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #11111a;
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 10px rgba(0,0,0,.45);
+      animation: fadeUp .3s ease both;
+    }
+    .sb-frame-img-wrap {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+    }
+    .sb-frame-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .sb-frame-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #151520;
+      border-top: 1px solid rgba(255,255,255,.03);
+    }
+    .sb-frame-time-left {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      color: #e2e2f0;
+      font-weight: bold;
+    }
+    .sb-frame-right-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sb-frame-time-right {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      color: #7a7a9a;
+    }
+    .sb-frame-check {
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+      accent-color: var(--accent3);
+    }
+
+    @keyframes pulse    { 0%,100% { opacity:.5; } 50% { opacity:1; } }
+
+    @media (max-width: 560px) {
+      .btn { justify-content: center; }
+      .video-preview { flex-direction: column; align-items: flex-start; }
+      .dl-controls { flex-direction: column; align-items: stretch; }
+      .dl-select { min-width: unset; }
+    }
+  
+    .progress-bg { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
+    .progress-fill { height: 100%; background: var(--accent1); width: 0%; transition: width 0.3s ease; }
+    .progress-fill.indeterminate { width: 100%; background: linear-gradient(90deg, transparent, var(--accent1), transparent); background-size: 200% 100%; animation: loadingStripes 1.5s infinite linear; }
+    @keyframes loadingStripes { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  </style>
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <div class="badge">&#9679; YouTube Transcript Probe</div>
+    <h1>Check Captions<br>&amp; Subtitles</h1>
+    <p>Paste multiple links or a playlist URL &mdash; check &amp; download transcripts in any language, as TXT, SRT, DOCX, PDF or ZIP.</p>
+  </header>
+
+  <div class="card">
+    <div class="tab-bar" role="tablist">
+      <button class="tab-btn active" id="tabChecker" role="tab" onclick="switchTab('checker')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        Checker
+      </button>
+      <button class="tab-btn" id="tabHistory" role="tab" onclick="switchTab('history')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        History
+      </button>
+    </div>
+
+    <div class="tab-panel active" id="panelChecker">
+      <!-- Multi-URL / Playlist input -->
+      <div>
+        <div class="sec-label"><span class="dot">&#9646;</span> Option 1 &mdash; Paste YouTube Links or Playlist URL</div>
+        <textarea id="urlInput" class="url-textarea"
+          placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://youtu.be/abcdefghijk&#10;&#10;— OR paste a playlist URL —&#10;https://www.youtube.com/playlist?list=PLxxxxxxxx"
+          spellcheck="false" oninput="detectPlaylist(this.value)"></textarea>
+
+        <!-- Playlist banner (shown when playlist detected) -->
+        <div id="playlistBanner">
+          <div class="pl-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            <span class="pl-title" id="plTitle">Playlist detected</span>
+            <span class="pl-meta" id="plMeta"></span>
+          </div>
+          <label class="pl-checkbox-row">
+            <input type="checkbox" id="plCheckAll" checked>
+            Download/check entire playlist (all videos)
+          </label>
+          <div id="plVideoList"></div>
+        </div>
+
+        <button class="btn full-width" id="checkBtn" onclick="handleCheck()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Check Links
+        </button>
+      </div>
+
+      <div class="or-sep"><div class="line"></div><span class="or-badge">OR</span><div class="line"></div></div>
+
+      <!-- Multi-screenshot upload -->
+      <div>
+        <div class="sec-label"><span class="dot">&#9646;</span> Option 2 &mdash; Upload Screenshots (select multiple)</div>
+          <div class="drop-zone" id="dropZone">
+            <input type="file" id="screenshotInput" accept="image/png,image/jpeg,image/jpg,image/webp" multiple />
+            <div class="drop-icon">&#128247;</div>
+            <div class="drop-label"><strong>Click to browse</strong> or drag &amp; drop screenshots</div>
+          </div>
+        
+      
+        <div id="imgPreviewGrid"></div>
+        <div id="imgCountBadge" class="img-count-badge"></div>
+        <button class="btn full-width" id="checkShotBtn" onclick="handleCheckScreenshots()" disabled>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Check Screenshots
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panelHistory">
+      <div id="historyList" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+
+    
+    
+    <!-- PROGRESS UI -->
+    <div id="progressUI" style="display:none; flex-direction:column; gap:15px; background:var(--surface); padding:20px; border-radius:12px; border:1px solid var(--border); margin-bottom: 20px;">
+      <div style="display:flex; justify-content:space-between; font-weight:bold; color:var(--text);">
+        <span id="progressTitle">Processing Items</span>
+        <span id="progressPercent">0%</span>
+      </div>
+      <div style="width:100%; height:10px; background:var(--bg); border-radius:5px; overflow:hidden;">
+        <div id="progressFill" style="width:0%; height:100%; background:var(--accent1); transition:width 0.3s;"></div>
+      </div>
+      <div id="progressList" style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto; padding-right:5px; font-size:0.85em;">
+      </div>
+    </div>
+    
+    <script>
+window.onerror = function(msg, url, line) {
+  alert('Global error: ' + msg + ' on line ' + line);
+};
+window.addEventListener('unhandledrejection', function(event) {
+  alert('Unhandled promise rejection: ' + event.reason);
+});
+
+      function initProgressUI(items, title) {
+        document.getElementById('progressUI').style.display = 'flex';
+        document.getElementById('progressTitle').textContent = title || 'Processing Items';
+        document.getElementById('progressPercent').textContent = '0%';
+        document.getElementById('progressFill').style.width = '0%';
+        const list = document.getElementById('progressList');
+        list.innerHTML = items.map((item, i) => `
+          <div id="prog_item_${i}" style="display:flex; justify-content:space-between; align-items:center; padding: 6px; background:var(--bg); border-radius:6px;">
+            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:70%;">${item.label}</span>
+            <span id="prog_status_${i}" style="color:var(--muted); font-weight:bold;">Pending</span>
+          </div>
+        `).join('');
+      }
+      function updateProgressItem(i, status, text) {
+        const el = document.getElementById('prog_status_' + i);
+        if(!el) return;
+        el.textContent = text;
+        if(status === 'processing') el.style.color = 'var(--accent3)';
+        if(status === 'done') el.style.color = 'var(--success)';
+        if(status === 'error') el.style.color = 'var(--error)';
+      }
+      function updateOverallProgress(completed, total) {
+        const pct = Math.round((completed / total) * 100);
+        document.getElementById('progressPercent').textContent = pct + '%';
+        document.getElementById('progressFill').style.width = pct + '%';
+      }
+      function hideProgressUI() {
+        document.getElementById('progressUI').style.display = 'none';
+      }
+    </script>
+
+    <div id="loading"><div class="spinner"></div><div class="loading-text" id="loadingText">PROBING TRANSCRIPTS...</div></div>
+    <div id="results"></div>
+    <div id="emptyState" class="empty-state">
+      <div class="icon">&#127909;</div>
+      <p>Paste YouTube links, a playlist URL,<br>or upload screenshots to get started.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Language list ─────────────────────────────────────────────────────────────
+const DOWNLOAD_LANGS = [
+  { code: 'original', name: 'Download as source language' },
+  { code: 'all', name: 'Download all available languages' },
+  { code: 'en', name: 'English' }, { code: 'ar', name: 'Arabic' },
+  { code: 'zh-CN', name: 'Chinese (Simplified)' }, { code: 'zh-TW', name: 'Chinese (Traditional)' },
+  { code: 'nl', name: 'Dutch' }, { code: 'fr', name: 'French' }, { code: 'de', name: 'German' },
+  { code: 'hi', name: 'Hindi' }, { code: 'id', name: 'Indonesian' }, { code: 'it', name: 'Italian' },
+  { code: 'ja', name: 'Japanese' }, { code: 'ko', name: 'Korean' }, { code: 'pl', name: 'Polish' },
+  { code: 'pt', name: 'Portuguese' }, { code: 'ru', name: 'Russian' }, { code: 'es', name: 'Spanish' },
+  { code: 'sv', name: 'Swedish' }, { code: 'tr', name: 'Turkish' }, { code: 'uk', name: 'Ukrainian' },
+  { code: 'ur', name: 'Urdu' },
+];
+const LANG_OPTS = DOWNLOAD_LANGS.map(l => `<option value="${escHtml(l.code)}">${escHtml(l.name)}</option>`).join('');
+
+// ── Playlist state ────────────────────────────────────────────────────────────
+let playlistData = null;
+
+async function detectPlaylist(val) {
+  const url = val.trim().split('\n')[0].trim();
+  const banner = document.getElementById('playlistBanner');
+  if (!url.includes('list=') || !url.includes('youtube.com')) {
+    banner.classList.remove('show');
+    playlistData = null;
+    return;
+  }
+  // Already fetching same URL
+  if (playlistData && playlistData._url === url) return;
+  document.getElementById('plTitle').textContent = 'Fetching playlist info…';
+  document.getElementById('plMeta').textContent = '';
+  document.getElementById('plVideoList').classList.remove('show');
+  banner.classList.add('show');
+  try {
+    const res = await fetch('/api/playlist-info', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    data._url = url;
+    playlistData = data;
+    document.getElementById('plTitle').textContent = data.title;
+    document.getElementById('plMeta').textContent = `${data.videos.length} / ${data.videoCount || '?'} videos`;
+    const list = document.getElementById('plVideoList');
+    list.innerHTML = data.videos.map((v, i) =>
+      `<div class="pl-video-item"><span>${i + 1}.</span>${escHtml(v.title)} ${v.duration ? '<span style="opacity:.5">' + escHtml(v.duration) + '</span>' : ''}</div>`
+    ).join('');
+    list.classList.add('show');
+  } catch (e) {
+    document.getElementById('plTitle').textContent = 'Could not fetch playlist: ' + e.message;
+    playlistData = null;
+  }
+}
+
+// ── Tab logic ─────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  ['Checker','History'].forEach(t => {
+    document.getElementById('tab'+t).classList.toggle('active', tab === t.toLowerCase());
+    document.getElementById('panel'+t).classList.toggle('active', tab === t.toLowerCase());
+  });
+  if (tab === 'history') { loadHistory(); setUI('history'); } else setUI('empty');
+}
+
+// ── URL check ─────────────────────────────────────────────────────────────────
+async function handleCheck() {
+    const raw = document.getElementById('urlInput').value.trim();
+    if (!raw) return;
+  
+    const btn = document.getElementById('checkBtn');
+    btn.disabled = true;
+    setUI('loading');
+    startLoadingMsgs(['PROBING TRANSCRIPTS...','FETCHING VIDEO INFO...','CHECKING CAPTIONS...']);
+  
+    try {
+      let urls = [];
+      if (playlistData && document.getElementById('plCheckAll').checked) {
+        urls = playlistData.videos.map(v => v.url);
+      } else {
+        urls = raw.split('\n').map(l => l.trim()).filter(Boolean);
+      }
+      
+      if (urls.length === 0) return;
+      
+      if (urls.length === 1) {
+        // Single URL
+        const res = await fetch('/api/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: urls[0] }) });
+        const data = await res.json();
+        stopLoadingMsgs();
+        renderBatchResults([{ url: urls[0], ...data }]);
+        return;
+      }
+      
+      // Batch mode with Progress UI
+      document.getElementById('loading').style.display = 'none'; // hide standard spinner
+      initProgressUI(urls.map(u => ({ label: u })), 'Checking Links');
+      
+      const results = new Array(urls.length);
+      const tasks = urls.map((url, i) => ({ url, index: i }));
+      let completed = 0;
+      
+      const CONCURRENCY = 5;
+      const worker = async () => {
+        while (tasks.length > 0) {
+          const task = tasks.shift();
+          updateProgressItem(task.index, 'processing', 'Checking...');
+          try {
+            const res = await fetch('/api/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: task.url }) });
+            const data = await res.json();
+            results[task.index] = { url: task.url, ...data };
+            updateProgressItem(task.index, 'done', 'Done');
+          } catch(e) {
+            results[task.index] = { url: task.url, valid: false, error: e.message };
+            updateProgressItem(task.index, 'error', 'Failed');
+          }
+          completed++;
+          updateOverallProgress(completed, urls.length);
+          await new Promise(r => setTimeout(r, 100)); // slight cool-down
+        }
+      };
+      
+      await Promise.all(Array(CONCURRENCY).fill().map(worker));
+      
+      stopLoadingMsgs();
+      hideProgressUI();
+      renderBatchResults(results.filter(Boolean));
+    } catch (e) {
+      stopLoadingMsgs();
+      hideProgressUI();
+      renderError('Network error: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+// ── Loading messages ──────────────────────────────────────────────────────────
+let _msgInterval = null;
+function startLoadingMsgs(msgs) {
+  let mi = 0;
+  _msgInterval = setInterval(() => {
+    mi = (mi + 1) % msgs.length;
+    const el = document.getElementById('loadingText');
+    if (el) el.textContent = msgs[mi];
+  }, 1400);
+}
+function stopLoadingMsgs() { clearInterval(_msgInterval); _msgInterval = null; }
+
+// ── Multi-screenshot ──────────────────────────────────────────────────────────
+let selectedFiles = [];
+const dropZone = document.getElementById('dropZone');
+const screenshotInput = document.getElementById('screenshotInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  console.log('Drop event files:', e.dataTransfer.files);
+  addFiles(Array.from(e.dataTransfer.files));
+});
+screenshotInput.addEventListener('change', e => { 
+  console.log('Change event files:', e.target.files);
+  addFiles(Array.from(e.target.files)); 
+  screenshotInput.value = ''; 
+});
+
+function addFiles(files) {
+  console.log('addFiles called with:', files);
+  files.forEach(f => { 
+      if (!selectedFiles.find(x => x.name === f.name && x.size === f.size)) {
+          selectedFiles.push(f); 
+      }
+  });
+  console.log('selectedFiles length:', selectedFiles.length);
+  renderThumbGrid();
+}
+window.removeFile = function(i) { selectedFiles.splice(i, 1); renderThumbGrid(); };
+function renderThumbGrid() {
+  const grid = document.getElementById('imgPreviewGrid');
+  const badge = document.getElementById('imgCountBadge');
+  const btn = document.getElementById('checkShotBtn');
+  if (!selectedFiles.length) {
+    grid.classList.remove('active'); grid.innerHTML = '';
+    badge.style.display = 'none'; btn.disabled = true; dropZone.style.display = '';
+    return;
+  }
+  dropZone.style.display = 'none';
+  grid.classList.add('active');
+  grid.innerHTML = selectedFiles.map((f, i) => {
+    const url = URL.createObjectURL(f);
+    return `<div class="img-thumb"><img src="${url}" onload="window.window.URL.revokeObjectURL(this.src)" alt=""><button class="rm-btn" onclick="removeFile(${i})">&times;</button></div>`;
+  }).join('');
+  badge.style.display = 'block';
+  badge.textContent = `${selectedFiles.length} screenshot${selectedFiles.length > 1 ? 's' : ''} selected`;
+  btn.disabled = false;
+}
+
+async function handleCheckScreenshots() {
+    if (!selectedFiles.length) return;
+    const btn = document.getElementById('checkShotBtn');
+    btn.disabled = true;
+    setUI('loading');
+    startLoadingMsgs(['EXTRACTING TEXT...','RUNNING OCR...','SEARCHING YOUTUBE...']);
+    
+    try {
+      if (selectedFiles.length === 1) {
+        // Single file
+        const fd = new FormData();
+        fd.append('screenshot', selectedFiles[0]);
+        const res = await fetch('/api/check-screenshot', { method: 'POST', body: fd });
+        const data = await res.json();
+        stopLoadingMsgs();
+        const output = [{ file: selectedFiles[0].name, ...data }];
+        if (output[0].requireConfirmation) renderConfirmation(output[0], selectedFiles[0]);
+        else renderBatchResults(output, true);
+        return;
+      }
+      
+      // Batch mode with Progress UI
+      document.getElementById('loading').style.display = 'none';
+      initProgressUI(selectedFiles.map(f => ({ label: f.name })), 'Processing Screenshots (OCR)');
+      
+      const results = new Array(selectedFiles.length);
+      const tasks = selectedFiles.map((file, i) => ({ file, index: i }));
+      let completed = 0;
+      
+      // strict concurrency of 2 for OCR
+      const CONCURRENCY = 2;
+      const worker = async () => {
+        while (tasks.length > 0) {
+          const task = tasks.shift();
+          updateProgressItem(task.index, 'processing', 'Extracting Text...');
+          try {
+            const fd = new FormData();
+            fd.append('screenshot', task.file);
+            const res = await fetch('/api/check-screenshot', { method: 'POST', body: fd });
+            const data = await res.json();
+            results[task.index] = { file: task.file.name, ...data };
+            updateProgressItem(task.index, 'done', 'Done');
+          } catch(e) {
+            results[task.index] = { file: task.file.name, valid: false, error: e.message };
+            updateProgressItem(task.index, 'error', 'Failed');
+          }
+          completed++;
+          updateOverallProgress(completed, selectedFiles.length);
+          await new Promise(r => setTimeout(r, 200));
+        }
+      };
+      
+      await Promise.all(Array(CONCURRENCY).fill().map(worker));
+      
+      stopLoadingMsgs();
+      hideProgressUI();
+      
+      const output = results.filter(Boolean);
+      const needsConfirm = output.find(r => r.requireConfirmation);
+      // If ANY require confirmation, we can't easily handle a batch confirmation in current UI,
+      // but the original code only handled confirmation if output.length === 1 anyway!
+      if (needsConfirm && output.length === 1) renderConfirmation(needsConfirm, selectedFiles[0]);
+      else renderBatchResults(output, true);
+      
+    } catch (e) { 
+      stopLoadingMsgs(); 
+      hideProgressUI();
+      renderError('Network error: ' + e.message); 
+    }
+    finally { 
+      btn.disabled = false; 
+    }
+  }
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+
+  
+
+  function setUI(state) {
+  document.getElementById('loading').classList.toggle('active', state === 'loading');
+  document.getElementById('results').classList.toggle('active', state === 'results' || state === 'history-results');
+  if (state === 'history') { document.getElementById('emptyState').style.display = 'none'; return; }
+  document.getElementById('emptyState').style.display = state === 'empty' ? 'block' : 'none';
+}
+
+function statusRow(ok, label, sublabel, tag) {
+  const cls = ok === true ? 'ok' : ok === 'warn' ? 'warn' : 'fail';
+  const icon = ok === true ? '&#10003;' : ok === 'warn' ? '&#9888;' : '&#215;';
+  const tagCls = 'tag-' + (ok === true ? 'ok' : ok === 'warn' ? 'warn' : 'fail');
+  return `<div class="status-row">
+    <div class="status-icon ${cls}">${icon}</div>
+    <div style="flex:1"><div class="status-label">${label}</div>${sublabel ? `<div class="status-sublabel">${sublabel}</div>` : ''}</div>
+    <span class="status-tag ${tagCls}">${tag}</span>
+  </div>`;
+}
+
+function buildDownloadPanel(data, uid) {
+  const srcOpts = (data.languages && data.languages.length > 0)
+    ? data.languages.map(l => `<option value="${escHtml(l.code)}">${escHtml(l.name)} [${escHtml(l.code)}]</option>`).join('')
+    : '<option value="auto">Default / Auto</option>';
+  return `
+    <div class="download-panel">
+      <div class="dl-panel-header">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Transcript
+      </div>
+      <div class="dl-controls">
+        <div class="dl-field"><label>Source Language</label><select class="dl-select" id="${uid}_src">${srcOpts}</select></div>
+        <div class="dl-field"><label>Download As</label><select class="dl-select" id="${uid}_tgt">${LANG_OPTS}</select></div>
+        <div class="dl-field"><label>Screenshot Quality</label><select class="dl-select" id="${uid}_sb_quality"><option value="min" selected>Min (Fastest)</option><option value="med">Medium</option><option value="max">Max (Best)</option></select></div>
+      </div>
+      <div class="dl-btns">
+        <button class="dl-btn txt" id="${uid}_txt" onclick="doDownload('${escHtml(data.videoId)}','txt','${uid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>
+          .TXT
+        </button>
+        <button class="dl-btn srt" id="${uid}_srt" onclick="doDownload('${escHtml(data.videoId)}','srt','${uid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 9h8M8 13h5"/><path d="M8 17h4"/></svg>
+          .SRT
+        </button>
+        <button class="dl-btn md" id="${uid}_md" onclick="doDownload('${escHtml(data.videoId)}','md','${uid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          .MD
+        </button>
+        <button class="dl-btn txt" id="${uid}_docx" onclick="doDownload('${escHtml(data.videoId)}','docx','${uid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          .DOCX
+        </button>
+        
+        <button class="dl-btn zip" id="${uid}_zip" onclick="doDownloadZip('${escHtml(data.videoId)}','${uid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          .ZIP (All Formats)
+        </button>
+        <div style="flex-basis: 100%; height: 0;"></div>
+        <button class="dl-btn zip" style="flex:1" onclick="downloadOnlyScreenshots('${escHtml(data.videoId)}', '${escHtml(data.title||'')}', '${escHtml(data.duration||'')}', '${escHtml(data.author||'')}', '${uid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Download ScreenShots (zip)
+        </button>
+        <button class="dl-btn zip" style="flex:1" onclick="downloadAllFormatsAndScreenshots('${escHtml(data.videoId)}', '${escHtml(data.title||'')}', '${escHtml(data.duration||'')}', '${escHtml(data.author||'')}', '${uid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download all Formate + SceenShot (zip)
+        </button>
+      </div>
+      <div class="dl-status" id="${uid}_status"></div>
+        <div class="progress-bg" id="${uid}_progress_bg"><div class="progress-fill" id="${uid}_progress_fill"></div></div>
+    </div>`;
+}
+
+function buildResultHTML(data, index, fromScreenshot) {
+  let html = '';
+  if (fromScreenshot && data.extractedUrl) {
+    html += `<div class="extracted-banner"><span style="flex-shrink:0;font-size:1rem">&#128247;</span><div><div class="eb-label">EXTRACTED FROM SCREENSHOT</div><div class="eb-url">${escHtml(data.extractedUrl)}</div></div></div>`;
+  }
+  
+  const wrapHtml = (innerHtml) => {
+    let layoutHtml = '';
+    if (data.inputImage) {
+      layoutHtml += `
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 300px;">
+            ${innerHtml}
+          </div>
+          <div style="flex-shrink: 0; width: 300px;">
+            <div style="font-family:'Space Mono', monospace; font-size:.7rem; color:var(--muted); margin-bottom:8px;">INPUT IMAGE</div>
+            <img src="${data.inputImage}" style="width: 100%; border-radius: 8px; border: 1px solid var(--border);" />
+          </div>
+        </div>
+      `;
+    } else {
+      layoutHtml = innerHtml;
+    }
+    
+    if (data.fileHash) {
+      layoutHtml += `
+        <div class="report-section" style="margin-top: 20px; padding: 16px; border: 1px solid var(--error); border-radius: var(--radius); background: rgba(255, 78, 106, 0.05);">
+          <div style="font-family:'Space Mono', monospace; font-size:.75rem; color:var(--error); font-weight:bold; margin-bottom: 12px;">REPORT ERROR & RE-PROCESS</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; font-size: 0.8rem; color: var(--text);">
+            <label><input type="checkbox" id="rep_title_${data.fileHash}" value="Title" /> Title</label>
+            <label><input type="checkbox" id="rep_dur_${data.fileHash}" value="Duration" /> Duration</label>
+            <label><input type="checkbox" id="rep_thumb_${data.fileHash}" value="Thumbnail" /> Thumbnail</label>
+            <label><input type="checkbox" id="rep_link_${data.fileHash}" value="Wrong Video Link" /> Wrong Video Link</label>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            
+            <button class="btn" onclick="submitReport('${data.fileHash}', '${data.videoId}')" style="padding: 8px 16px; font-size: .75rem; background: var(--error); color: #fff;">
+              Submit Report
+            </button>
+            <button class="btn" onclick="submitMatch('${data.fileHash}', '${data.videoId}')" style="padding: 8px 16px; font-size: .75rem; background: var(--success); color: #000; margin-left: 10px;">
+              Matched
+            </button>
+            <span id="rep_msg_${data.fileHash}" style="font-size: 0.75rem; color: var(--success); display: none; margin-left: 10px;">Report submitted!</span>
+            <span id="match_msg_${data.fileHash}" style="font-size: 0.75rem; color: var(--success); display: none; margin-left: 10px;">Match confirmed!</span>
+
+          </div>
+          <div style="margin-top: 16px; border-top: 1px dashed rgba(255, 255, 255, 0.1); padding-top: 16px;">
+            <button class="btn full-width" onclick="reprocessScreenshot('${data.fileHash}', ${index}, ${fromScreenshot})" style="font-size: 1rem; padding: 16px; background: var(--accent); color: #000; justify-content: center;">
+              Re Process
+            </button>
+            <span id="reproc_msg_${data.fileHash}" style="font-size: 0.75rem; color: var(--success); display: none;">Reprocessing...</span>
+          </div>
+        </div>
+      `;
+    }
+    return layoutHtml;
+  };
+
+  if (!data.valid) {
+    html += statusRow(false, fromScreenshot ? 'No YouTube video identified' : 'Invalid YouTube URL', '', 'INVALID');
+    html += `<div class="error-banner"><strong>Error</strong>${escHtml(data.error || 'Unknown error.')}</div>`;
+    if (data.extractedText) html += `<div class="error-banner" style="color:var(--muted);border-color:var(--border);background:var(--surface)"><strong style="color:var(--text)">Extracted Text</strong>${escHtml(data.extractedText.substring(0,400))}</div>`;
+    return wrapHtml(html);
+  }
+  
+  html += statusRow(true, 'Valid YouTube URL', `ID: ${escHtml(data.videoId)}`, 'VALID');
+  if (!data.videoFound) {
+    html += statusRow(false, 'Video Not Found', 'Private, deleted or unavailable.', 'UNAVAILABLE');
+    html += statusRow(false, 'Transcripts', 'Cannot check - video unavailable.', 'UNKNOWN');
+    return wrapHtml(html);
+  }
+
+  html += `<div class="video-preview">
+    <div class="thumb-wrap">
+      <img src="${escHtml(data.thumbnail)}" />
+      <div class="duration-badge">${escHtml(data.duration)}</div>
+    </div>
+    <div style="flex:1;overflow:hidden;">
+      <div class="video-title">${escHtml(data.title)}</div>
+      <div class="video-author">${escHtml(data.author)}</div>
+      <div class="video-id">ID: ${escHtml(data.videoId)} &bull; Chapters: ${data.videoInfo && data.videoInfo.chapters ? data.videoInfo.chapters.length : (data.chapters ? data.chapters.length : 0)}</div>
+    </div>
+  </div>`;
+
+  if (data.transcriptAvailable) {
+    html += statusRow(true, 'Transcripts / Captions Available', '', 'AVAILABLE');
+    html += `<div style="margin-top:16px;padding-left:14px;border-left:2px solid var(--border);">
+      <div style="font-family:'Space Mono', monospace; font-size:.7rem; color:var(--muted); margin-bottom:8px;">LANGUAGES (${data.languages.length})</div>
+      <div class="lang-tags">`;
+    data.languages.forEach(l => {
+      html += `<span class="lang-tag"><span class="dot"></span>${escHtml(l.name)} <span style="opacity:0.6;font-size:0.85em">[${escHtml(l.code)}]</span></span>`;
+    });
+    html += `</div></div>`;
+
+    const dlUid = 'dl_' + index + '_' + data.videoId;
+    
+    const allLangs = [
+      { code: 'en', name: 'English' }, { code: 'es', name: 'Spanish' }, { code: 'fr', name: 'French' },
+      { code: 'de', name: 'German' }, { code: 'pt', name: 'Portuguese' }, { code: 'ja', name: 'Japanese' },
+      { code: 'zh-Hans', name: 'Chinese' }, { code: 'ar', name: 'Arabic' },
+      { code: 'hi', name: 'Hindi' }, { code: 'ru', name: 'Russian' }, { code: 'ko', name: 'Korean' },
+      { code: 'it', name: 'Italian' }, { code: 'tr', name: 'Turkish' }, { code: 'ur', name: 'Urdu' }
+    ];
+    let langOptions = `<option value="original">Download as source language</option>`;
+    allLangs.forEach(l => {
+      langOptions += `<option value="${escHtml(l.code)}">Translate to ${escHtml(l.name)} [${escHtml(l.code)}]</option>`;
+    });
+
+
+    html += `<div class="download-panel">
+      <div style="font-family:'Space Mono', monospace; font-size:.7rem; color:var(--accent); font-weight:bold; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> DOWNLOAD TRANSCRIPT
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:16px; margin-bottom:12px;">
+        <div style="flex:1; min-width:200px;">
+          <div style="font-size:0.65rem; color:var(--muted); margin-bottom:6px; font-family:'Space Mono',monospace;">SOURCE LANGUAGE</div>
+          <select class="combo" id="${dlUid}_src">
+            ${data.languages.map(l => `<option value="${escHtml(l.code)}">${escHtml(l.name)} [${escHtml(l.code)}]</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <div style="font-size:0.65rem; color:var(--muted); margin-bottom:6px; font-family:'Space Mono',monospace;">DOWNLOAD AS</div>
+          <select class="combo" id="${dlUid}_tgt">${langOptions}</select>
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <div style="font-size:0.65rem; color:var(--muted); margin-bottom:6px; font-family:'Space Mono',monospace;">SCREENSHOT QUALITY</div>
+          <select class="combo" id="${dlUid}_sb_quality">
+            <option value="min">Min (Fastest)</option>
+            <option value="med">Mid (Medium)</option>
+            <option value="max">Max (Best)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button class="dl-btn txt" onclick="downloadFormat('${escHtml(data.videoId)}', '${escHtml(data.title)}', 'txt', '${dlUid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> .TXT
+        </button>
+        <button class="dl-btn srt" onclick="downloadFormat('${escHtml(data.videoId)}', '${escHtml(data.title)}', 'srt', '${dlUid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> .SRT
+        </button>
+        <button class="dl-btn md" onclick="downloadFormat('${escHtml(data.videoId)}', '${escHtml(data.title)}', 'md', '${dlUid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> .MD
+        </button>
+        <button class="dl-btn docx" onclick="downloadFormat('${escHtml(data.videoId)}', '${escHtml(data.title)}', 'docx', '${dlUid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> .DOCX
+        </button>
+        <button class="dl-btn zip" onclick="downloadAllFormatsAndScreenshots('${escHtml(data.videoId)}', '${escHtml(data.title)}', '${escHtml(data.duration)}', '${escHtml(data.author)}', '${dlUid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> .ZIP (All Formats)
+        </button>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+        <button class="dl-btn zip" style="flex:1" onclick="downloadSelectedStoryboard('sb_${index}_${escHtml(data.videoId)}', '${escHtml(data.title)}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Download ScreenShots (zip)
+        </button>
+        <button class="dl-btn zip" style="flex:1" onclick="downloadAllFormatsAndScreenshots('${escHtml(data.videoId)}', '${escHtml(data.title)}', '${escHtml(data.duration)}', '${escHtml(data.author)}', '${dlUid}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download all Formate + SceenShot (zip)
+        </button>
+      </div>
+      <div class="dl-status" id="${dlUid}_status"></div>
+    </div>`;
+  } else {
+    html += statusRow(false, 'Transcripts / Captions', 'None available for this video.', 'UNAVAILABLE');
+    if (data.transcriptError) {
+      html += `<div class="error-banner"><strong>Transcript Error</strong>${escHtml(data.transcriptError)}</div>`;
+    }
+  }
+
+  // Storyboard screenshots panel
+  if (data.videoId) {
+    const sbUid = `sb_${index}_${data.videoId}`;
+    html += `
+      <div class="storyboard-panel" style="margin-top: 14px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="font-family:'Space Mono', monospace; font-size:.7rem; color:var(--text); font-weight:bold; display:flex; align-items:center; gap:6px;">
+            <span>🎞️</span> STORYBOARD SCREENSHOTS
+          </div>
+          <div id="${sbUid}_controls" style="display: none; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 6px; font-family:'Space Mono', monospace; font-size:.65rem; color:var(--text); cursor: pointer; user-select: none;">
+              Include Timestamp in Filename
+            </label>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn" style="padding: 5px 10px; font-size: .65rem; background: rgba(0,229,255,.12); color: var(--accent); border: 1px solid rgba(0,229,255,.25);" onclick="toggleAllStoryboard('${sbUid}', true)">Select All</button>
+              <button class="btn" style="padding: 5px 10px; font-size: .65rem; background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border);" onclick="toggleAllStoryboard('${sbUid}', false)">Deselect All</button>
+            </div>
+            <button class="btn" onclick="downloadSelectedStoryboard('${sbUid}', '${escHtml(data.title)}')" style="padding: 6px 12px; font-size: .68rem; background: var(--success); color: #000;">
+              Download Selected
+            </button>
+          </div>
+        </div>
+
+        <div id="${sbUid}_init" style="text-align: center; padding: 10px 0;">
+          <button class="btn" id="${sbUid}_load_btn" onclick="loadStoryboard('${escHtml(data.videoId)}', '${sbUid}')" style="margin: 0 auto; padding: 8px 16px; font-size: .75rem; background: rgba(0,229,255,.1); color: var(--accent); border: 1px solid rgba(0,229,255,.25);">
+            🎞️ Load Storyboard Screenshots
+          </button>
+        </div>
+
+        <div id="${sbUid}_loading" style="display: none; flex-direction: column; align-items: center; gap: 8px; padding: 15px 0;">
+          <div class="spinner" style="width: 28px; height: 28px; border-width: 2px;"></div>
+          <div style="font-family:'Space Mono', monospace; font-size:.68rem; color:var(--accent);" id="${sbUid}_loading_txt">Fetching storyboards...</div>
+        </div>
+
+        <div id="${sbUid}_grid" class="storyboard-grid" style="display: none;"></div>
+
+        <div id="${sbUid}_status" style="font-family:'Space Mono', monospace; font-size:.65rem; color:var(--muted); min-height: 1.2em;">
+          Slices the YouTube storyboard spritesheet into individual frames with exact timestamps.
+        </div>
+      </div>
+    `;
+  }
+
+  return wrapHtml(html);
+}
+
+
+async function submitMatch(fileHash, videoId) {
+  try {
+    const res = await fetch('/api/report-match', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileHash, videoId })
+    });
+    if (res.ok) {
+      const msg = document.getElementById(`match_msg_${fileHash}`);
+      if (msg) {
+        msg.style.display = 'inline-block';
+        setTimeout(() => msg.style.display = 'none', 3000);
+      }
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function submitReport(fileHash, videoId) {
+  const issues = [];
+  ['title', 'dur', 'thumb', 'link'].forEach(id => {
+    const cb = document.getElementById(`rep_${id}_${fileHash}`);
+    if (cb && cb.checked) issues.push(cb.value);
+  });
+  try {
+    const res = await fetch('/api/report-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileHash, videoId, issues })
+    });
+    if (res.ok) {
+      const msg = document.getElementById(`rep_msg_${fileHash}`);
+      if (msg) {
+        msg.style.display = 'inline-block';
+        setTimeout(() => msg.style.display = 'none', 3000);
+      }
+    }
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+async function reprocessScreenshot(fileHash, index, fromScreenshot) {
+  const msg = document.getElementById(`reproc_msg_${fileHash}`);
+  if (msg) msg.style.display = 'inline-block';
+  try {
+    const res = await fetch('/api/reprocess-screenshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileHash })
+    });
+    const data = await res.json();
+    if (data.valid || data.error) {
+      if (currentResults && currentResults[index]) {
+        currentResults[index] = data;
+        renderBatchResults(currentResults, fromScreenshot);
+      } else {
+        renderBatchResults([data], fromScreenshot);
+      }
+    }
+  } catch(e) {
+    console.error(e);
+    if (msg) {
+      msg.textContent = 'Error: ' + e.message;
+      msg.style.color = 'var(--error)';
+    }
+  }
+}
+
+
+
+let currentResults = [];
+let _lastFromScreenshot = false;
+
+function renderBatchResults(results, fromScreenshot) {
+  currentResults = results;
+  _lastFromScreenshot = !!fromScreenshot;
+
+  const container = document.getElementById('results');
+  const isBatch = results.length > 1;
+  if (isBatch) {
+    let cardsHtml = results.map((data, i) => {
+      const label = data.url || data.file || `Item ${i + 1}`;
+      const tagCls = data.transcriptAvailable ? 'tag-ok' : data.valid === false ? 'tag-fail' : 'tag-warn';
+      const tagTxt = data.transcriptAvailable ? 'HAS CAPTIONS' : data.valid === false ? 'INVALID' : 'NO CAPTIONS';
+      return `<div class="batch-card">
+        <div class="batch-card-header" style="display: flex; align-items: center;">
+          <input type="checkbox" class="batch-select-checkbox" data-video-id="${escHtml(data.videoId || '')}" data-index="${i}" ${data.transcriptAvailable ? 'checked' : 'disabled'} style="margin-right: 10px; width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent);" onchange="updateBatchSelectionCount()" />
+          <span class="bc-num">${i + 1}</span>
+          <span class="bc-url" style="margin-left: 8px;">${escHtml(label)}</span>
+          <span class="status-tag ${tagCls}" style="flex-shrink:0">${tagTxt}</span>
+        </div>
+        <div class="batch-card-body">${buildResultHTML(data, i, fromScreenshot)}</div>
+      </div>`;
+    }).join('');
+
+    const globalPanelHtml = `
+      <div class="batch-global-controls" style="margin-top: 24px; padding: 20px; border: 1px dashed var(--border); border-radius: var(--radius); background: var(--surface); display: flex; flex-direction: column; gap: 16px; animation: fadeUp .5s ease both;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div style="font-family: 'Space Mono', monospace; font-size: .75rem; color: var(--text);" id="batchSelectionText">
+            0 / 0 videos selected
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" style="padding: 6px 12px; font-size: .7rem; background: rgba(0,229,255,.12); color: var(--accent); border: 1px solid rgba(0,229,255,.25);" onclick="toggleAllBatch(true)">Select All</button>
+            <button class="btn" style="padding: 6px 12px; font-size: .7rem; background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border);" onclick="toggleAllBatch(false)">Deselect All</button>
+          </div>
+        </div>
+        
+        <div class="download-panel" style="border-color: rgba(0,229,255,.3);">
+          <div class="dl-panel-header">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Batch Download Transcripts
+          </div>
+          <div class="dl-controls">
+            <div class="dl-field"><label>Download As</label><select class="dl-select" id="global_dl_tgt">${LANG_OPTS}</select></div>
+            <div class="dl-field"><label>Storyboard Quality</label><select class="dl-select" id="global_sb_quality"><option value="min" selected>Min (Fastest)</option><option value="med">Mid (Medium)</option><option value="max">Max (Best)</option></select></div>
+          </div>
+          <div class="dl-btns">
+            <button class="dl-btn txt" id="global_dl_txt" onclick="doBatchDownload('txt')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>
+              .TXT (ZIP)
+            </button>
+            <button class="dl-btn srt" id="global_dl_srt" onclick="doBatchDownload('srt')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 9h8M8 13h5"/><path d="M8 17h4"/></svg>
+              .SRT (ZIP)
+            </button>
+            <button class="dl-btn md" id="global_dl_md" onclick="doBatchDownload('md')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              .MD (ZIP)
+            </button>
+            <button class="dl-btn txt" id="global_dl_docx" onclick="doBatchDownload('docx')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              .DOCX (ZIP)
+            </button>
+            <button class="dl-btn zip" id="global_dl_zip" onclick="doBatchDownload('zip')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              All Transcripts (ZIP)
+            </button>
+            <div style="flex-basis: 100%; height: 0;"></div>
+            <button class="dl-btn zip" style="flex:1" onclick="doBatchStoryboardDownload(false)">
+              All Storyboards (ZIP)
+            </button>
+            <button class="dl-btn zip" style="flex:1" onclick="doBatchStoryboardDownload(true)">
+              Transcripts & Storyboards (ZIP)
+            </button>
+          </div>
+          <div class="dl-status" id="global_dl_status"></div>
+          <div class="progress-bg" id="global_progress_bg"><div class="progress-fill" id="global_progress_fill"></div></div>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = cardsHtml + globalPanelHtml;
+    setTimeout(updateBatchSelectionCount, 100);
+  } else {
+    container.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">${buildResultHTML(results[0], 0, fromScreenshot)}</div>`;
+  }
+  setUI('results');
+}
+
+function renderError(msg) {
+  document.getElementById('results').innerHTML = `<div class="error-banner"><strong>Error</strong>${escHtml(msg)}</div>`;
+  setUI('results');
+}
+
+function renderConfirmation(data, file) {
+  const container = document.getElementById('results');
+  const reader = new FileReader();
+  reader.onload = e => {
+    container.innerHTML = `
+      <div class="error-banner" style="background:rgba(255,184,0,.1);border-color:rgba(255,184,0,.3);color:var(--warn);">
+        <strong>Verification Required</strong>Could not automatically verify this video matches your screenshot.
+      </div>
+      <div style="display:flex;gap:14px;margin-top:4px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:160px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface);">
+          <div style="padding:7px;font-size:.7rem;text-align:center;border-bottom:1px solid var(--border);color:var(--muted);font-family:'Space Mono',monospace;">Your Screenshot</div>
+          <img src="${e.target.result}" style="width:100%;max-height:170px;object-fit:contain;display:block;"/>
+        </div>
+        <div style="flex:1;min-width:160px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface);">
+          <div style="padding:7px;font-size:.7rem;text-align:center;border-bottom:1px solid var(--border);color:var(--muted);font-family:'Space Mono',monospace;">Found Video</div>
+          <img src="${escHtml(data.videoInfo.thumbnail)}" style="width:100%;max-height:130px;object-fit:cover;display:block;"/>
+          <div style="padding:10px;">
+            <div style="font-weight:bold;font-size:.8rem;margin-bottom:3px;">${escHtml(data.videoInfo.title)}</div>
+            <div style="font-size:.7rem;color:var(--muted);">${escHtml(data.videoInfo.author)} &bull; ${escHtml(data.videoInfo.duration)}</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button class="btn" style="flex:1;background:var(--success);color:#000;" onclick="confirmVideo('${data.videoId}')">&#10003; Yes, Same Video</button>
+        <button class="btn" style="flex:1;background:var(--error);color:#fff;" onclick="rejectVideo()">&#215; Mismatch</button>
+      </div>`;
+    setUI('results');
+  };
+  reader.readAsDataURL(file);
+}
+
+window.confirmVideo = function(videoId) {
+  document.getElementById('urlInput').value = 'https://www.youtube.com/watch?v=' + videoId;
+  switchTab('checker'); handleCheck();
+};
+window.rejectVideo = function() {
+  document.getElementById('results').innerHTML = `<div class="error-banner"><strong>Cross-check failed</strong>You rejected the match. Please try a clearer screenshot or paste the URL directly.</div>`;
+};
+
+// ── Download helpers ──────────────────────────────────────────────────────────
+function dlState(uid, busy, msg, cls) {
+  const statusEl = document.getElementById(uid + '_status');
+  ['txt','srt','md','zip'].forEach(f => {
+    const b = document.getElementById(uid + '_' + f);
+    if (b) b.disabled = busy;
+  });
+  if (statusEl) { statusEl.textContent = msg; statusEl.className = 'dl-status' + (cls ? ' ' + cls : ''); }
+}
+
+
+async function triggerLocalSave(blob, filename, uid, statusEl) {
+  const destPath = document.getElementById('localSavePath').value.trim();
+  const formData = new FormData();
+  formData.append('file', blob, filename);
+  formData.append('destPath', destPath);
+  formData.append('filename', filename);
+
+  const res = await fetch('/api/save-local', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Backend save failed');
+  return data;
+}
+
+async function triggerDownload(url, body, uid, busyMsg) {
+  dlState(uid, true, busyMsg);
+  const useLocal = document.getElementById('localSaveEnable')?.checked;
+  const localPath = document.getElementById('localSavePath')?.value.trim();
+  if (useLocal && localPath) body.destPath = localPath;
+
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Server error' }));
+      dlState(uid, false, '✗ ' + (err.error || 'Failed'), 'err'); return;
+    }
+    const data = res.headers.get('content-type').includes('json') ? await res.json() : null;
+    if (data && data.success) {
+      dlState(uid, false, '✓ Saved to: ' + data.path, 'ok');
+      return;
+    }
+    
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const fnMatch = disposition.match(/filename="([^"]+)"/);
+    const filename = fnMatch ? fnMatch[1] : 'transcript';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click();
+        setTimeout(() => { window.URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    dlState(uid, false, '✓ Downloaded: ' + filename, 'ok');
+  } catch (e) {
+    dlState(uid, false, '✗ ' + e.message, 'err');
+  }
+}
+
+window.updateBatchSelectionCount = function() {
+  const checkboxes = document.querySelectorAll('.batch-select-checkbox:not(:disabled)');
+  const checked = document.querySelectorAll('.batch-select-checkbox:checked');
+  const countSpan = document.getElementById('batchSelectionText');
+  if(countSpan) countSpan.textContent = `${checked.length} / ${checkboxes.length} videos selected`;
+};
+
+window.toggleAllBatch = function(force) {
+  const checkboxes = document.querySelectorAll('.batch-select-checkbox:not(:disabled)');
+  checkboxes.forEach(cb => cb.checked = force);
+  window.updateBatchSelectionCount();
+};
+
+window.doBatchDownload = function(format) {
+  const items = Array.from(document.querySelectorAll('.batch-select-checkbox:checked')).map(cb => {
+    return { videoId: cb.getAttribute('data-video-id') };
+  });
+
+  if (items.length === 0) return;
+
+  const targetLang = document.getElementById('global_dl_tgt')?.value || 'original';
+  const targetSuffix = targetLang === 'original' ? 'orig' : targetLang;
+  
+  let msg = '';
+  if (format === 'zip') {
+    msg = 'Building master ZIP (all formats)\u2026';
+  } else if (format === 'md') {
+    msg = 'Building batch Markdown ZIP\u2026';
+  } else {
+    msg = `Building batch ZIP (${format.toUpperCase()})\u2026`;
+  }
+
+  const statusEl = document.getElementById('global_dl_status');
+    const progBg = document.getElementById('global_progress_bg');
+    const progFill = document.getElementById('global_progress_fill');
+    if(progBg) { progBg.style.display = 'block'; progFill.className = 'progress-fill indeterminate'; }
+    const btns = ['global_dl_txt', 'global_dl_srt', 'global_dl_md', 'global_dl_docx', 'global_dl_zip'];
+  btns.forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = true;
+  });
+  if (statusEl) {
+    statusEl.textContent = msg;
+    statusEl.className = 'dl-status';
+  }
+
+  const isPlaylist = (typeof playlistData !== 'undefined' && playlistData !== null && document.getElementById('plCheckAll')?.checked);
+  const playlistTitle = isPlaylist ? playlistData.title : null;
+  let filename = '';
+
+  const bodyPayload = { items, format, targetLang, isPlaylist, playlistTitle };
+  const useLocal = document.getElementById('localSaveEnable')?.checked;
+  const localPath = document.getElementById('localSavePath')?.value.trim();
+  if (useLocal && localPath) bodyPayload.destPath = localPath;
+
+  fetch('/api/download-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bodyPayload)
+  })
+  .then(async res => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Server error' }));
+      throw new Error(err.error || 'Download failed');
+    }
+    
+    // Check if it was saved locally
+    const isJson = res.headers.get('content-type')?.includes('json');
+    if (isJson) {
+      const data = await res.json();
+      if (data.success) {
+        if(statusEl) { statusEl.style.color = 'var(--success)'; statusEl.textContent = '\u2713 Saved to: ' + data.path; }
+        return null; // Skip blob download
+      }
+    }
+    
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const fnMatch = disposition.match(/filename="([^"]+)"/);
+    filename = fnMatch ? fnMatch[1] : `batch_transcripts_${targetSuffix}_${format}.zip`;
+    return res.blob();
+  })
+  .then(blob => {
+    if (!blob) return; // Locally saved
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { window.URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    if (statusEl) {
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = '\u2713 Downloaded Batch ZIP';
+    }
+  })
+  .catch(err => {
+    if (statusEl) {
+      statusEl.style.color = 'var(--error)';
+      statusEl.textContent = '\u2717 ' + err.message;
+    }
+  })
+  .finally(() => {
+    btns.forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.disabled = false;
+    });
+    if (window.updateBatchSelectionCount) window.updateBatchSelectionCount();
+  });
+};
+
+
+window.doBatchStoryboardDownload = async function(includeTranscripts) {
+  const items = Array.from(document.querySelectorAll('.batch-select-checkbox:checked')).map(cb => {
+    return { 
+      videoId: cb.getAttribute('data-video-id'),
+      title: cb.closest('.batch-card').querySelector('.video-title')?.textContent || 'Video'
+    };
+  });
+  if (items.length === 0) return;
+
+  const statusEl = document.getElementById('global_dl_status');
+  if (statusEl) { statusEl.textContent = 'Fetching batch storyboards...'; statusEl.className = 'dl-status'; }
+   
+    const progBg = document.getElementById('global_progress_bg');
+    const progFill = document.getElementById('global_progress_fill');
+    if (progBg) { progBg.style.display = 'block'; progFill.className = 'progress-fill'; progFill.style.width = '0%'; }
+
+
+  try {
+    let zip;
+    if (includeTranscripts) {
+      statusEl.textContent = 'Fetching transcripts ZIP from backend...';
+      const targetLang = document.getElementById('global_dl_tgt')?.value || 'original';
+      const isPlaylist = (typeof playlistData !== 'undefined' && playlistData !== null && document.getElementById('plCheckAll')?.checked);
+      const playlistTitle = isPlaylist ? playlistData.title : null;
+      
+      const payload = { items: items.map(i => ({ videoId: i.videoId })), format: 'zip', targetLang, isPlaylist, playlistTitle };
+      const res = await fetch('/api/download-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Failed to fetch batch transcripts ZIP');
+      const blob = await res.blob();
+      zip = await JSZip.loadAsync(blob);
+    } else {
+      zip = new JSZip();
+    }
+
+    let completed = 0;
+    for (const item of items) {
+      statusEl.textContent = "Fetching storyboards for video " + (completed + 1) + "/" + items.length + "...";
+        if (progFill) progFill.style.width = ((completed / items.length) * 100) + '%';
+      try {
+        const globalQual = document.getElementById('global_sb_quality')?.value || 'min';
+        const frames = await window.fetchStoryboardFrames(item.videoId, globalQual);
+        const safeTitle = item.title.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/s+/g, '_').substring(0, 50);
+        let targetFolder = zip.folder(safeTitle);
+        if (!targetFolder) targetFolder = zip.folder(item.videoId);
+        
+        frames.forEach((f) => {
+          const b64 = f.dataUrl.split(',')[1];
+          const timeStr = f.timeStr.replace(/:/g, '_');
+          targetFolder.folder("Storyboards").file(`${timeStr}.jpg`, b64, { base64: true });
+        });
+      } catch (e) {
+        console.warn("Skipped storyboard for " + item.videoId + ":", e);
+      }
+      completed++;
+    }
+
+    statusEl.textContent = 'Packing final ZIP...';
+      if(progFill) progFill.style.width = '100%';
+    const content = await zip.generateAsync({ type: 'blob' });
+    
+    const now = new Date();
+    const datePart = now.toISOString().split('T')[0];
+    const timePart = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
+    let zipFilename = "Combine_Download_" + datePart + "_" + timePart + ".zip";
+    
+    if (items.length === 1) {
+      const safeSingleTitle = items[0].title.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/s+/g, '_').substring(0, 50);
+      zipFilename = safeSingleTitle + ".zip";
+    }
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = zipFilename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { window.URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    
+    if (statusEl) {
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = '✓ Downloaded Batch ' + (includeTranscripts ? 'Transcripts & Storyboards' : 'Storyboards');
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.color = 'var(--error)';
+      statusEl.textContent = '✗ ' + err.message;
+    }
+  }
+};
+
+window.saveGeminiKey = function(uid) {
+  const key = document.getElementById(uid + '_key').value.trim();
+  localStorage.setItem('gemini_api_key', key);
+  
+  document.querySelectorAll('[id$="_key"]').forEach((el) => {
+    if (el.id !== uid + '_key') el.value = key;
+  });
+};
+
+window.doGeminiTranscribe = async function(videoId, index, uid) {
+  const keyInput = document.getElementById(uid + '_key');
+  const btn = document.getElementById(uid + '_btn');
+  const statusEl = document.getElementById(uid + '_status');
+  
+  const key = keyInput.value.trim();
+  if (!key) {
+    statusEl.textContent = '❌ Please enter a valid Gemini API Key.';
+    statusEl.style.color = 'var(--error)';
+    return;
+  }
+  
+  btn.disabled = true;
+  keyInput.disabled = true;
+  statusEl.style.color = 'var(--accent3)';
+  statusEl.textContent = '📥 Downloading audio stream from YouTube... (approx. 10-15s)';
+  
+  try {
+    const res = await fetch('/api/transcribe-gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId, apiKey: key })
+    });
+    
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Transcription failed' }));
+      throw new Error(err.error || 'Server error');
+    }
+    
+    statusEl.textContent = '⚡ Audio uploaded! Gemini is transcribing...';
+    const updatedData = await res.json();
+    
+    statusEl.style.color = 'var(--success)';
+    statusEl.textContent = '✓ Transcription completed successfully! Refreshing card...';
+    
+    if (currentResults && currentResults[index]) {
+      currentResults[index] = updatedData;
+      setTimeout(() => {
+        renderBatchResults(currentResults, _lastFromScreenshot);
+      }, 1500);
+    }
+  } catch (e) {
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = '❌ ' + e.message;
+    btn.disabled = false;
+    keyInput.disabled = false;
+  }
+};
+
+function formatTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  
+  const mStr = String(m).padStart(2, '0');
+  const sStr = String(s).padStart(2, '0');
+  
+  if (h > 0) {
+    return `${String(h).padStart(2, '0')}:${mStr}:${sStr}`;
+  }
+  return `${mStr}:${sStr}`;
+}
+
+
+
+window.storyboardCache = window.storyboardCache || {};
+
+window.fetchStoryboardFrames = async function(videoId, quality, onProgress) {
+  const cacheKey = videoId + '_' + quality;
+  if (window.storyboardCache[cacheKey]) return window.storyboardCache[cacheKey];
+  
+  const res = await fetch(`/api/storyboards?videoId=${videoId}`);
+  if (!res.ok) throw new Error('No storyboards found');
+  const data = await res.json();
+  const { baseUrlTemplate, levels } = data;
+  if (!levels || levels.length === 0) throw new Error('No storyboard tiers available.');
+  
+  // Sort levels ascending by width
+  levels.sort((a, b) => a.w - b.w);
+  let selectedLevelIndex = 0; // min
+  if (quality === 'max') {
+    selectedLevelIndex = levels.length - 1;
+  } else if (quality === 'med') {
+    selectedLevelIndex = Math.floor(levels.length / 2);
+  }
+  
+  const level = levels[selectedLevelIndex];
+  const { w, h, cols, rows, count, interval, prefix, token } = level;
+  const framesPerSheet = cols * rows;
+  const totalSheets = Math.ceil(count / framesPerSheet);
+  const sheetUrls = [];
+  for (let s = 0; s < totalSheets; s++) {
+    let sheetNum = (prefix || 'default').includes('$M') ? prefix.replace('$M', s) : s;
+    sheetUrls.push(baseUrlTemplate.replace('$L', level.originalLevel !== undefined ? level.originalLevel : selectedLevelIndex).replace('$N', sheetNum) + (token ? `&sigh=${token}` : ''));
+  }
+
+  const frames = [];
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = w; canvas.height = h;
+  for (let s = 0; s < sheetUrls.length; s++) {
+    if (onProgress) onProgress(`Slicing sheet ${s + 1}/${sheetUrls.length}...`);
+    
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = `/api/storyboard-proxy?url=${encodeURIComponent(sheetUrls[s])}`;
+      
+      let loaded = false;
+      let retries = 2;
+      while (!loaded && retries > 0) {
+          try {
+              await new Promise((r, j) => { 
+                  img.onload = r; 
+                  img.onerror = () => j(new Error('Sheet failed')); 
+              });
+              loaded = true;
+          } catch(e) {
+              retries--;
+              if (retries > 0) {
+                  img.src = `/api/storyboard-proxy?url=${encodeURIComponent(sheetUrls[s])}&retry=${Date.now()}`;
+              } else {
+                  console.warn('Skipping sheet ' + s + ' after retries');
+              }
+          }
+      }
+      
+      if (!loaded) continue; // Skip to next sheet if it completely failed
+
+      for (let f = 0; f < framesPerSheet; f++) {
+
+      const frameIndex = s * framesPerSheet + f;
+      if (frameIndex >= count) break;
+      const col = f % cols; const row = Math.floor(f / cols);
+      
+        ctx.clearRect(0, 0, w, h);
+        
+        let targetWidth = w;
+        let targetHeight = h;
+        if (quality === 'min') { targetWidth = 480; targetHeight = Math.round(480 * (h/w)); }
+        else if (quality === 'med') { targetWidth = 768; targetHeight = Math.round(768 * (h/w)); }
+        else if (quality === 'max') { targetWidth = 1080; targetHeight = Math.round(1080 * (h/w)); }
+        
+        // Resize canvas if needed
+        if (canvas.width !== targetWidth) {
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+        }
+        
+        ctx.drawImage(img, col * w, row * h, w, h, 0, 0, targetWidth, targetHeight);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        
+        // Restore canvas size for clearRect in next iteration
+        if (canvas.width !== w) {
+            canvas.width = w;
+            canvas.height = h;
+        }
+
+      const timeSecs = (frameIndex * interval) / 1000;
+      frames.push({ dataUrl, timeStr: formatTime(timeSecs) });
+    }
+  }
+  window.storyboardCache[cacheKey] = frames;
+  return frames;
+};
+
+
+window.doDownload = function(videoId, format, uid) {
+  const tgt = document.getElementById(uid + '_tgt')?.value || 'original';
+  const body = { videoId: videoId, lang: 'auto', targetLang: tgt, format: format };
+  triggerDownload('/api/download', body, uid, `Fetching ${format.toUpperCase()}...`);
+};
+
+window.doDownloadZip = function(videoId, uid) {
+  const tgt = document.getElementById(uid + '_tgt')?.value || 'original';
+  const body = { videoId: videoId, lang: 'auto', targetLang: tgt };
+  triggerDownload('/api/download-zip', body, uid, `Fetching ZIP formats from server...`);
+};
+
+window.downloadOnlyScreenshots = async function(videoId, title, duration, author, uid) {
+  const statusEl = document.getElementById(uid + '_status');
+  
+    const qualEl = document.getElementById(uid + '_sb_quality');
+    const qual = qualEl ? qualEl.value : 'min';
+    statusEl.style.color = 'var(--accent3)';
+    
+    const progBg = document.getElementById(uid + '_progress_bg');
+    const progFill = document.getElementById(uid + '_progress_fill');
+    if(progBg) { 
+        progBg.style.display = 'block'; 
+        progFill.className = 'progress-fill indeterminate'; 
+    }
+
+  statusEl.textContent = '📥 Fetching screenshots...';
+  try {
+    const frames = await window.fetchStoryboardFrames(videoId, qual, msg => { statusEl.textContent = '📥 ' + msg; });
+    const zip = new JSZip();
+    const safeTitle = title.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_').substring(0, 50);
+    const safeAuthor = author.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_').substring(0, 30);
+    const safeDuration = duration.replace(/:/g, '-');
+    
+    frames.forEach((f) => {
+      const b64 = f.dataUrl.split(',')[1];
+      const timeStr = f.timeStr.replace(/:/g, '_');
+      zip.folder("Storyboards").file(`${timeStr}.jpg`, b64, { base64: true });
+    });
+    
+    statusEl.textContent = '⚡ Zipping...';
+    const content = await zip.generateAsync({ type: 'blob' });
+    const filename = `${safeTitle}_${safeDuration}_${safeAuthor}.zip`;
+    const useLocal = document.getElementById('localSaveEnable')?.checked;
+    
+    if (useLocal && document.getElementById('localSavePath')?.value.trim()) {
+      statusEl.textContent = '⚡ Saving directly to backend folder...';
+      const result = await triggerLocalSave(content, filename, uid, statusEl);
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✓ Saved to: ${result.path}`;
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(content);
+      a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { window.URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✓ Downloaded ${frames.length} screenshots (${qual.toUpperCase()} quality)!`;
+    }
+  } catch (err) {
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = `❌ ${err.message}`;
+  }
+};
+
+
+window.downloadAllFormatsAndScreenshots = async function(videoId, title, duration, author, uid) {
+    const statusEl = document.getElementById(uid + '_status');
+    const qualEl = document.getElementById(uid + '_sb_quality');
+    const qual = qualEl ? qualEl.value : 'min';
+    statusEl.style.color = 'var(--accent3)';
+    
+    try {
+      const tgt = document.getElementById(uid + '_tgt').value;
+      
+      statusEl.textContent = 'dY" Fetching screenshots (scaled)...';
+      const frames = await window.fetchStoryboardFrames(videoId, qual, msg => { statusEl.textContent = 'dY" ' + msg; });
+      
+      statusEl.textContent = 'dY" Generating Visual PDF & DOCX on server...';
+      
+      const payload = {
+        videoId: videoId,
+        targetLang: tgt,
+        frames: frames.map(f => ({ time: f.timeStr, b64: f.dataUrl.split(',')[1] }))
+      };
+
+      const res = await fetch('/api/build-visual-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) throw new Error('Failed to generate visual ZIP');
+      
+      const blob = await res.blob();
+      
+      const safeTitleShort = title.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_').substring(0, 50);
+      const safeAuthor = author.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_').substring(0, 30);
+      const safeDuration = duration.replace(/:/g, '-');
+      const filename = `${safeTitleShort}_${safeDuration}_${safeAuthor}_Visual_Export.zip`;
+      
+      const useLocal = document.getElementById('localSaveEnable')?.checked;
+      if (useLocal && document.getElementById('localSavePath')?.value.trim()) {
+        statusEl.textContent = 's Saving directly to backend folder...';
+        const formData = new FormData();
+        formData.append('file', blob, filename);
+        formData.append('folder', document.getElementById('localSavePath').value.trim());
+        const saveRes = await fetch('/api/save-local', { method: 'POST', body: formData });
+        if(!saveRes.ok) throw new Error('Failed to save to local folder.');
+        statusEl.style.color = 'var(--success)';
+        statusEl.textContent = `o" Saved Master ZIP + Visuals to Local Folder!`;
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a); a.click();
+        
+        setTimeout(() => { window.URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        statusEl.style.color = 'var(--success)';
+        statusEl.textContent = `o" Downloaded Master ZIP + Visuals (${qual.toUpperCase()} quality)!`;
+        if(progBg) setTimeout(() => progBg.style.display = 'none', 2000);
+
+      }
+    
+    } catch (err) {
+      statusEl.style.color = 'var(--error)';
+      statusEl.textContent = 'o- ' + err.message;
+      if(progBg) progBg.style.display = 'none';
+    }
+
+  };
+window.loadStoryboard = async function(videoId, sbUid) {
+  const initEl = document.getElementById(sbUid + '_init');
+  const loadingEl = document.getElementById(sbUid + '_loading');
+  const loadingTxt = document.getElementById(sbUid + '_loading_txt');
+  const gridEl = document.getElementById(sbUid + '_grid');
+  const controlsEl = document.getElementById(sbUid + '_controls');
+  const statusEl = document.getElementById(sbUid + '_status');
+
+  initEl.style.display = 'none';
+  loadingEl.style.display = 'flex';
+  loadingTxt.textContent = 'Initializing storyboard...';
+  
+  // Also grab the quality from the associated download panel
+  const dlUid = sbUid.replace('_sb', ''); 
+  const qualEl = document.getElementById(dlUid + '_sb_quality');
+  const qual = qualEl ? qualEl.value : 'min';
+
+  try {
+    const frames = await window.fetchStoryboardFrames(videoId, qual, msg => {
+      loadingTxt.textContent = msg;
+    });
+
+    let gridHtml = '';
+    frames.forEach((frame, idx) => {
+      gridHtml += `
+        <div class="sb-frame-card">
+          <div class="sb-frame-img-wrap">
+            <img src="${frame.dataUrl}" loading="lazy" />
+          </div>
+          <div class="sb-frame-banner">
+            <span class="sb-frame-time-left">${frame.timeStr}</span>
+            <div class="sb-frame-right-wrap">
+              <span class="sb-frame-time-right">${frame.timeStr}</span>
+              <input type="checkbox" class="sb-frame-check" data-dataurl="${frame.dataUrl}" data-timestr="${frame.timeStr.replace(/:/g, '_')}" checked />
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    gridEl.innerHTML = gridHtml;
+    gridEl.style.display = 'grid';
+    controlsEl.style.display = 'flex';
+    loadingEl.style.display = 'none';
+    statusEl.style.color = 'var(--success)';
+    statusEl.textContent = `✓ Loaded ${frames.length} frames successfully (${qual.toUpperCase()} quality).`;
+  } catch (err) {
+    loadingEl.style.display = 'none';
+    initEl.style.display = 'block';
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = `❌ ${err.message}`;
+  }
+};
+
+// ── History ───────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/history');
+    const data = await res.json();
+    const container = document.getElementById('historyList');
+    if (!data.length) { container.innerHTML = '<div class="empty-state" style="display:block"><p>No history yet.</p></div>'; return; }
+    let html = '';
+    data.reverse().forEach(item => {
+      const itemStr = JSON.stringify(item).replace(/'/g, '&#39;');
+      html += `<div class="history-item" onclick='showHistoryResult(${itemStr})'>
+        <div class="thumb-wrap" style="width:76px;height:43px;flex-shrink:0;">
+          <img src="${escHtml(item.thumbnail)}" onerror="this.style.display='none'"/>
+        </div>
+        <div style="flex:1;overflow:hidden;">
+          <div class="video-title" style="font-size:.82rem;">${escHtml(item.title)}</div>
+          <div class="video-author">${escHtml(item.author)}</div>
+          <div class="video-id" style="color:${item.transcriptAvailable ? 'var(--success)' : 'var(--error)'}">
+            ${item.transcriptAvailable ? '&#10003; Transcripts Available' : '&#215; No Transcripts'}
+          </div>
+        </div>
+      </div>`;
+    });
+    container.innerHTML = html;
+  } catch(e) {}
+}
+window.showHistoryResult = function(item) { renderBatchResults([item]); setUI('history-results'); };
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+setUI('empty');
+</script>
+</body>
+</html>

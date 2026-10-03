@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YT Screenshot Feedback Tool</title>
+    <style>
+        :root {
+            --bg-color: #0f0f0f;
+            --card-bg: #272727;
+            --text-main: #f1f1f1;
+            --text-muted: #aaaaaa;
+            --accent-red: #ff0000;
+            --accent-green: #2ba640;
+            --accent-green-bg: rgba(43, 166, 64, 0.1);
+            --border-color: #3f3f3f;
+            --border-radius: 12px;
+            --transition: all 0.3s ease;
+            --font-family: "Roboto", "Arial", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background-color: var(--bg-color);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .btn {
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn:hover {
+            background-color: #3f3f3f;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-red);
+            border-color: var(--accent-red);
+        }
+
+        .btn-primary:hover {
+            background-color: #cc0000;
+            border-color: #cc0000;
+        }
+
+        main {
+            flex: 1;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .content-split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            min-height: 400px;
+        }
+
+        .panel {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            border: 1px solid var(--border-color);
+        }
+
+        .panel-header {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .image-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            min-height: 300px;
+            position: relative;
+        }
+
+        .image-container img {
+            max-width: 100%;
+            max-height: 500px;
+            object-fit: contain;
+        }
+
+        /* Result Panel specific */
+        .result-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            flex: 1;
+        }
+
+        .yt-thumbnail-container {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            aspect-ratio: 16/9;
+            background-color: #000;
+        }
+        
+        .yt-thumbnail-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .yt-info h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .yt-meta {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .yt-link {
+            display: inline-block;
+            margin-top: 1rem;
+            color: #3ea6ff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .yt-link:hover {
+            text-decoration: underline;
+        }
+
+        .extracted-vs-matched {
+            background-color: rgba(255,255,255,0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: auto;
+        }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: auto 1fr 1fr;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+        .comparison-header {
+            font-weight: bold;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 4px;
+        }
+
+        /* Feedback Section */
+        .feedback-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        /* Remarks & Re-process section */
+        .remarks-section {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 1.25rem 1.5rem;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .remarks-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .remarks-textarea {
+            width: 100%;
+            min-height: 70px;
+            background-color: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 0.95rem;
+            resize: vertical;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .remarks-textarea:focus {
+            border-color: #3ea6ff;
+            box-shadow: 0 0 0 2px rgba(62, 166, 255, 0.2);
+        }
+
+        .btn-reprocess {
+            background-color: #065fd4;
+            border-color: #065fd4;
+            padding: 10px 20px;
+            border-radius: 20px;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+        }
+
+        .btn-reprocess:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+
+        .btn-reprocess:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-group-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .feedback-card {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            border: 2px solid var(--border-color);
+            transition: var(--transition);
+        }
+
+        .feedback-card.good {
+            border-color: var(--accent-green);
+        }
+
+        .feedback-card.bad {
+            border-color: var(--accent-red);
+        }
+
+        .feedback-card h3 {
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--text-muted);
+            border-radius: 4px;
+            background-color: transparent;
+            cursor: pointer;
+            position: relative;
+            transition: var(--transition);
+        }
+
+        .good .checkbox-item input[type="checkbox"]:checked {
+            background-color: var(--accent-green);
+            border-color: var(--accent-green);
+        }
+
+        .bad .checkbox-item input[type="checkbox"]:checked {
+            background-color: var(--accent-red);
+            border-color: var(--accent-red);
+        }
+
+        .checkbox-item input[type="checkbox"]:checked::after {
+            content: "✓";
+            position: absolute;
+            color: white;
+            font-size: 14px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Bottom Controls & Stats */
+        .bottom-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 2rem 0;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .submit-btn-lg {
+            padding: 12px 40px;
+            font-size: 1.2rem;
+            border-radius: 30px;
+        }
+
+        .stats-bar {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 6px;
+            background-color: var(--card-bg);
+            border-radius: 3px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff0000, #ff4e4e);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Loading Spinner */
+        .spinner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(39, 39, 39, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: var(--border-radius);
+            z-index: 10;
+            display: none;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--border-color);
+            border-top-color: var(--accent-red);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Collapsible OCR */
+        .collapsible {
+            background-color: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+        .collapsible-header {
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            font-weight: 500;
+            user-select: none;
+        }
+        .collapsible-header:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+        .collapsible-content {
+            padding: 15px;
+            display: none;
+            border-top: 1px solid var(--border-color);
+            font-family: monospace;
+            white-space: pre-wrap;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .collapsible.active .collapsible-content {
+            display: block;
+        }
+        
+        /* Toast */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            background-color: var(--accent-green);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .error-message {
+            color: #ff4e4e;
+            text-align: center;
+            padding: 2rem;
+            display: none;
+        }
+
+        @media (max-width: 900px) {
+            .content-split, .feedback-section {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🔍 YT Screenshot → Link Feedback</h1>
+        <div class="nav-controls">
+            <span id="image-counter">Image 0 of 0</span>
+            <button class="btn" id="btn-prev" onclick="prevImage()">◄ Prev</button>
+            <button class="btn" id="btn-next" onclick="nextImage()">Next ►</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="content-split">
+            <!-- Left Panel: Original Image -->
+            <div class="panel">
+                <div class="panel-header">📸 Input Image</div>
+                <div class="image-container">
+                    <img id="input-image" src="" alt="Screenshot" style="display: none;">
+                </div>
+            </div>
+
+            <!-- Right Panel: Result -->
+            <div class="panel" id="result-panel">
+                <div class="panel-header">
+                    <span>📋 Output Result</span>
+                    <span id="processing-time" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+                </div>
+                
+                <div class="spinner-overlay" id="loading-spinner">
+                    <div class="spinner"></div>
+                    <div>Processing... OCR in progress</div>
+                </div>
+
+                <div class="error-message" id="error-message"></div>
+
+                <div class="result-content" id="result-content" style="display: none;">
+                    <div class="yt-thumbnail-container">
+                        <img id="yt-thumbnail" src="" alt="YouTube Thumbnail">
+                    </div>
+                    
+                    <div class="yt-info">
+                        <h2 id="yt-title">Video Title</h2>
+                        <div class="yt-meta">
+                            <div id="yt-channel">Channel: ...</div>
+                            <div id="yt-duration">Duration: ...</div>
+                        </div>
+                        <a href="#" id="yt-link" class="yt-link" target="_blank">🔗 YouTube Link</a>
+                    </div>
+
+                    <div class="extracted-vs-matched">
+                        <div class="comparison-grid">
+                            <div class="comparison-header">Field</div>
+                            <div class="comparison-header">Extracted (OCR)</div>
+                            <div class="comparison-header">Matched (YT)</div>
+                            
+                            <div>Title</div>
+                            <div id="ocr-title" style="color:#aaa">-</div>
+                            <div id="match-title" style="color:#fff">-</div>
+                            
+                            <div>Channel</div>
+                            <div id="ocr-channel" style="color:#aaa">-</div>
+                            <div id="match-channel" style="color:#fff">-</div>
+                            
+                            <div>Duration</div>
+                            <div id="ocr-duration" style="color:#aaa">-</div>
+                            <div id="match-duration" style="color:#fff">-</div>
+                        </div>
+                    </div>
+
+                    <div class="collapsible" id="ocr-collapsible">
+                        <div class="collapsible-header" onclick="toggleCollapsible()">
+                            <span>Raw OCR Text</span>
+                            <span>▼</span>
+                        </div>
+                        <div class="collapsible-content" id="raw-ocr-text"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback Section -->
+        <div class="feedback-section">
+            <!-- Good Response -->
+            <div class="feedback-card good">
+                <h3>✅ Good Response</h3>
+                <div class="checkbox-group" id="good-checkboxes">
+                    <label class="checkbox-item">
+                        <input type="checkbox" value="title" data-side="good" onchange="handleCheckboxChange(this)"> Title
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" value="duration" data-side="good" onchange="handleCheckboxChange(this)"> Duration
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" value="thumbnail" data-side="good" onchange="handleCheckboxChange(this)"> Thumbnail
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" value="channel" data-side="good" onchange="handleCheckboxChange(this)"> Channel Name
+                    </label>
+                </div>
+            </div>
+
+            <!-- Bad Response -->
+            <div class="feedback-card bad">
+                <h3>❌ Bad Response</h3>
+                <div class="checkbox-group" id="bad-checkboxes">
+                    <label class="checkbox-item">
+                        <input type="checkbox" value="title" data-side="bad" onchange="handleCheckboxChange(this)"> Title
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" value="duration" data-side="bad" onchange="handleCheckboxChange(this)"> Duration
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" value="thumbnail" data-side="bad" onchange="handleCheckboxChange(this)"> Thumbnail
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" value="channel" data-side="bad" onchange="handleCheckboxChange(this)"> Channel Name
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Remarks / Guidance & Re-Process Section -->
+        <div class="remarks-section">
+            <div class="remarks-header">
+                <span>💬 Remarks / Guidance for Search:</span>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">Guide the AI (e.g. paste exact title snippet, channel, keywords, or URL)</span>
+            </div>
+            <textarea id="user-remarks" class="remarks-textarea" placeholder="Enter your remarks, hints, or correct keywords here to guide the re-process..."></textarea>
+            <div style="display: flex; justify-content: flex-end;">
+                <button class="btn-reprocess" id="btn-reprocess" onclick="reprocessCurrentImage()">
+                    <span>🔄 Re-Process Video</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Submit & Stats -->
+        <div class="bottom-controls">
+            <div class="btn-group-row">
+                <button class="btn btn-primary submit-btn-lg" onclick="submitFeedback()">📤 Submit Feedback</button>
+            </div>
+            
+            <div style="width: 100%;">
+                <div class="stats-bar">
+                    <span id="stats-progress">Progress: 0/0 reviewed</span>
+                    <span id="stats-accuracy">Accuracy: 0%</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-fill" id="progress-bar"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // State
+        let imageList = [];
+        let currentIndex = -1;
+        let currentResult = null;
+        let stats = { reviewed: 0, total: 0, accuracy: 0 };
+
+        // DOM Elements
+        const elInputImg = document.getElementById('input-image');
+        const elCounter = document.getElementById('image-counter');
+        const elBtnPrev = document.getElementById('btn-prev');
+        const elBtnNext = document.getElementById('btn-next');
+        const elSpinner = document.getElementById('loading-spinner');
+        const elResultContent = document.getElementById('result-content');
+        const elErrorMsg = document.getElementById('error-message');
+        const elProcessingTime = document.getElementById('processing-time');
+
+        // Initialization
+        async function init() {
+            try {
+                const res = await fetch('/api/images/load');
+                if (!res.ok) throw new Error('Failed to load images');
+                const data = await res.json();
+                // Backend returns array of { filename, fullPath, folder }
+                imageList = Array.isArray(data) ? data : (data.images || []);
+                stats.total = imageList.length;
+                
+                await updateStatsDisplay();
+                
+                if (imageList.length > 0) {
+                    currentIndex = 0;
+                    loadImage(currentIndex);
+                } else {
+                    elErrorMsg.textContent = 'No images found.';
+                    elErrorMsg.style.display = 'block';
+                }
+            } catch (err) {
+                console.error(err);
+                showError('Could not connect to server.');
+            }
+        }
+
+        // Image Loading & Processing
+        async function loadImage(index) {
+            if (index < 0 || index >= imageList.length) return;
+            
+            currentIndex = index;
+            const imageObj = imageList[index];
+            const imagePath = imageObj.fullPath || imageObj;
+            
+            // Update UI state
+            elCounter.textContent = `Image ${index + 1} of ${imageList.length}`;
+            elBtnPrev.disabled = index === 0;
+            elBtnNext.disabled = index === imageList.length - 1;
+            
+            elInputImg.src = `/api/images/serve?path=${encodeURIComponent(imagePath)}`;
+            elInputImg.style.display = 'block';
+            
+            // Reset feedback forms
+            resetFeedback();
+            
+            // Clear remarks for new image
+            const remarksEl = document.getElementById('user-remarks');
+            if (remarksEl) remarksEl.value = '';
+            
+            // Reset display
+            document.querySelector('.yt-thumbnail-container').style.display = '';
+            document.querySelector('.yt-info').style.display = '';
+            document.querySelector('.extracted-vs-matched').style.display = '';
+            
+            // Trigger processing
+            await processImage(imagePath);
+        }
+
+        async function processImage(imagePath, remarks = '') {
+            elResultContent.style.display = 'none';
+            elErrorMsg.style.display = 'none';
+            elSpinner.style.display = 'flex';
+            elProcessingTime.textContent = '';
+            
+            const btnReprocess = document.getElementById('btn-reprocess');
+            if (btnReprocess) btnReprocess.disabled = true;
+
+            const startTime = Date.now();
+            currentResult = null;
+
+            try {
+                const res = await fetch('/api/images/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imagePath, remarks })
+                });
+                
+                const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2);
+                elProcessingTime.textContent = `⏱ ${timeTaken}s`;
+                
+                const data = await res.json();
+                
+                if (!data.success && !data.found) {
+                    showError(data.error || 'No match found for this image.', data.ocrText);
+                    return;
+                }
+                
+                currentResult = data;
+                displayResult(data);
+                
+            } catch (err) {
+                console.error(err);
+                showError(err.message);
+            } finally {
+                elSpinner.style.display = 'none';
+                if (btnReprocess) btnReprocess.disabled = false;
+            }
+        }
+
+        async function reprocessCurrentImage() {
+            if (currentIndex < 0 || currentIndex >= imageList.length) return;
+            const imageObj = imageList[currentIndex];
+            const imagePath = imageObj.fullPath || imageObj;
+            const remarks = document.getElementById('user-remarks')?.value || '';
+            
+            showToast('🔄 Re-processing with your guidance...');
+            await processImage(imagePath, remarks);
+        }
+
+        function displayResult(data) {
+            // Backend returns: { success, ocrText, extracted: { title, channel, duration }, found: { videoId, title, channel, duration, thumbnail, url } }
+            const found = data.found || {};
+            const ext = data.extracted || {};
+            
+            document.getElementById('yt-thumbnail').src = found.thumbnail || '';
+            document.getElementById('yt-title').textContent = found.title || 'Unknown Title';
+            document.getElementById('yt-channel').textContent = `Channel: ${found.channel || 'Unknown'}`;
+            const durText = found.duration ? `Duration: ${found.duration}` : 'Duration: -';
+            const scoreText = found.combinedScore !== undefined ? ` | Match Score: ${found.combinedScore}% (Visual: ${found.visualScore || 0}%)` : '';
+            document.getElementById('yt-duration').textContent = durText + scoreText;
+            
+            const linkEl = document.getElementById('yt-link');
+            if (found.url) {
+                linkEl.href = found.url;
+                linkEl.textContent = `🔗 ${found.url}`;
+                linkEl.style.display = 'inline-block';
+            } else {
+                linkEl.style.display = 'none';
+            }
+            
+            // Extracted vs Matched comparison
+            document.getElementById('ocr-title').textContent = ext.title || '-';
+            document.getElementById('match-title').textContent = found.title || '-';
+            
+            document.getElementById('ocr-channel').textContent = ext.channel || '-';
+            document.getElementById('match-channel').textContent = found.channel || '-';
+            
+            document.getElementById('ocr-duration').textContent = ext.duration || '-';
+            document.getElementById('match-duration').textContent = found.duration || '-';
+            
+            document.getElementById('raw-ocr-text').textContent = data.ocrText || 'No raw text provided';
+            
+            elResultContent.style.display = 'flex';
+        }
+
+        function showError(msg, rawOcr = null) {
+            elErrorMsg.textContent = msg;
+            elErrorMsg.style.display = 'block';
+            if (rawOcr) {
+                document.getElementById('raw-ocr-text').textContent = rawOcr;
+                elResultContent.style.display = 'flex';
+                // Hide YT parts but keep OCR visible
+                document.querySelector('.yt-thumbnail-container').style.display = 'none';
+                document.querySelector('.yt-info').style.display = 'none';
+                document.querySelector('.extracted-vs-matched').style.display = 'none';
+            }
+        }
+
+        // Feedback Logic
+        function handleCheckboxChange(checkbox) {
+            const side = checkbox.getAttribute('data-side');
+            const value = checkbox.value;
+            const isChecked = checkbox.checked;
+            
+            if (isChecked) {
+                // Deselect on the opposite side
+                const oppositeSide = side === 'good' ? 'bad' : 'good';
+                const oppositeCheckbox = document.querySelector(`input[data-side="${oppositeSide}"][value="${value}"]`);
+                if (oppositeCheckbox) {
+                    oppositeCheckbox.checked = false;
+                }
+            }
+        }
+
+        function resetFeedback() {
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+        }
+
+        async function submitFeedback() {
+            if (currentIndex < 0 || currentIndex >= imageList.length) return;
+            
+            const imageObj = imageList[currentIndex];
+            const goodChecked = [...document.querySelectorAll('input[data-side="good"]:checked')].map(cb => cb.value);
+            const badChecked = [...document.querySelectorAll('input[data-side="bad"]:checked')].map(cb => cb.value);
+            
+            if (goodChecked.length === 0 && badChecked.length === 0) {
+                showToast('Please select at least one checkbox before submitting.', true);
+                return;
+            }
+            
+            // Determine overall response: if any bad checkboxes are checked, it's "bad"
+            const response = badChecked.length > 0 ? 'bad' : 'good';
+            const found = currentResult?.found || {};
+            const remarks = document.getElementById('user-remarks')?.value || '';
+            
+            const feedbackData = {
+                imageFile: imageObj.filename || '',
+                imagePath: imageObj.fullPath || imageObj,
+                ocrText: currentResult?.ocrText || '',
+                foundVideoId: found.videoId || '',
+                foundTitle: found.title || '',
+                foundChannel: found.channel || '',
+                foundDuration: found.duration || '',
+                response: response,
+                wrongFields: badChecked,
+                remarks: remarks
+            };
+
+            try {
+                const res = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(feedbackData)
+                });
+                
+                if (res.ok) {
+                    showToast('✅ Feedback submitted!');
+                    await updateStatsDisplay();
+                    nextImage();
+                } else {
+                    showToast('Error submitting feedback', true);
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Network error submitting feedback', true);
+            }
+        }
+
+        // Stats
+        async function updateStatsDisplay() {
+            try {
+                const res = await fetch('/api/feedback/stats');
+                if (res.ok) {
+                    const data = await res.json();
+                    stats.reviewed = data.total || 0;
+                    stats.accuracy = data.accuracy || 0;
+                }
+            } catch (err) {
+                // Ignore silent fail for stats
+            }
+            
+            const total = imageList.length || 0;
+            const acc = stats.accuracy.toFixed(1);
+            
+            document.getElementById('stats-progress').textContent = `Progress: ${stats.reviewed}/${total} reviewed`;
+            document.getElementById('stats-accuracy').textContent = `Accuracy: ${acc}%`;
+            
+            const perc = total > 0 ? (stats.reviewed / total) * 100 : 0;
+            document.getElementById('progress-bar').style.width = `${perc}%`;
+        }
+
+        // Navigation
+        function prevImage() {
+            if (currentIndex > 0) loadImage(currentIndex - 1);
+        }
+        function nextImage() {
+            if (currentIndex < imageList.length - 1) loadImage(currentIndex + 1);
+        }
+
+        // UI Helpers
+        function toggleCollapsible() {
+            document.getElementById('ocr-collapsible').classList.toggle('active');
+        }
+
+        function showToast(msg, isError = false) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            if (isError) toast.style.backgroundColor = '#ff4e4e';
+            toast.textContent = msg;
+            
+            container.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 10);
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                prevImage();
+            } else if (e.key === 'ArrowRight') {
+                nextImage();
+            } else if (e.key === 'Enter') {
+                submitFeedback();
+            }
+        });
+
+        // Start
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
